@@ -1,3 +1,4 @@
 *.plt
 *.dump
 ebin/*
+deps

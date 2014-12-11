@@ -10,11 +10,7 @@
 -type decoder() :: fun((dbval()) -> erlval()).
 -type validator() :: fun((erlval()) -> ok | {error, any()}).
 
--type sql() :: binary().
--type bindings() :: [dbval()].
-
--type dbquery() :: {sql(), bindings()}.
-
+          
 -record(field, {
           name :: fieldname(),
           columns :: columns() | undefined,
@@ -34,4 +30,22 @@
           schema :: #schema{},
           existing :: #{ fieldname() => erlval() },
           new :: #{ fieldname() => erlval() }
+         }).
+
+
+
+-type fieldset() :: [{#schema{}, all | [fieldname()]}].
+-type where() :: [{fieldname(), erlval()}].
+-type sql() :: binary().
+-type bindings() :: [dbval()].
+
+-record(dbquery, {
+          sql :: binary(),
+          fields :: fieldset(),
+          bindings :: bindings()
+         }).
+
+-record(dbresult, {
+          raw :: any(),
+          module :: atom()
          }).
