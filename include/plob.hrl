@@ -10,11 +10,11 @@
 -type decoder() :: fun((dbval()) -> erlval()).
 -type validator() :: fun((erlval()) -> ok | {error, any()}).
 
+-type rowvals() :: #{ fieldname() => erlval() }.
           
 -record(field, {
           name :: fieldname(),
           columns :: columns() | undefined,
-          default :: erlval(),
           validator :: validator() | undefined,
           encoder :: encoder() | undefined,
           decoder :: decoder() | undefined
@@ -28,8 +28,8 @@
 
 -record(row, {
           schema :: #schema{},
-          existing :: #{ fieldname() => erlval() },
-          new :: #{ fieldname() => erlval() }
+          existing :: rowvals(),
+          new :: rowvals()
          }).
 
 
