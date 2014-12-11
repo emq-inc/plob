@@ -6,8 +6,8 @@
 -type columns() :: fieldname() | [fieldname()].
 -type values() :: erlval() | [erlval()].
 
--type encoder() :: fun((erlval()) -> dbval()).
--type decoder() :: fun((dbval()) -> erlval()).
+-type encoder() :: atom() | fun((erlval()) -> dbval()).
+-type decoder() :: atom() | fun((dbval()) -> erlval()).
 -type validator() :: fun((erlval()) -> ok | {error, any()}).
 
 -type rowvals() :: #{ fieldname() => erlval() }.
@@ -34,7 +34,7 @@
 
 
 
--type fieldset() :: [{#schema{}, all | [fieldname()]}].
+-type fieldset() :: [{#schema{}, [#field{}]}].
 -type where() :: [{fieldname(), erlval()}].
 -type sql() :: binary().
 -type bindings() :: [dbval()].

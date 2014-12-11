@@ -13,9 +13,11 @@
 
 -export([
          get_obj/1,
-
          lookup/2,
          filter/2,
+
+         insert/2,
+
          compile/1,
 
          decode_one/2
@@ -34,6 +36,8 @@
           values :: [erlval()]
          }).
 
+-type operation() :: #select{} | #insert{}.
+
 %%%===================================================================
 %%% Select builders
 %%%===================================================================
@@ -42,11 +46,11 @@
 get_obj(Schema) ->
     #select{ fields = [{Schema, Schema#schema.fields}] }.
 
--spec lookup(values(), #select{}) -> #dbquery{}.
+-spec lookup(values(), #select{}) -> #select{}.
 lookup(PKVal, #select{ fields=[{Schema, _}]}=Select) ->
     Select#select{ where = pk_where(PKVal, Schema) }.
 
--spec filter(where() | #{}, #select{}) -> #dbquery{}.
+-spec filter(where() | #{}, #select{}) -> #select{}.
 filter(#{}=Where, Select) ->
     filter(maps:to_list(Where), Select);
 filter(Where, Select) ->
@@ -69,6 +73,7 @@ insert(Map, Schema) ->
 %%%===================================================================
 
 %% XXX BGH TODO: This could be a bit nicer, especially around bindings
+-spec compile(operation()) -> #dbquery{}.
 compile(#select{fields=Fields, where=Where, limit=Limit}) ->
     SQL = list_to_binary(
             [<<"SELECT ">>, sql_col_list(Fields),
@@ -129,12 +134,14 @@ decode_one(Query, #dbresult{ raw = Raw, module = Module }) ->
 %%% Encoding and decoding
 %%%===================================================================
 
+-spec encode(encoder(), any()) -> any().
 encode(undefined, Val) -> Val;
 encode(json, Val) -> jsx:encode(Val);
 encode(Fun, Val) when is_function(Fun) -> Fun(Val);
 encode(Other, _Val) ->
     throw({no_such_encoder, Other}).
 
+-spec decode(decoder(), any()) -> any().
 decode(undefined, Val) -> Val;
 decode(json, Val) -> jsx:decode(Val, [{labels, atom}, return_maps]);
 decode(Fun, Val) when is_function(Fun) -> Fun(Val);
@@ -152,6 +159,7 @@ list_to_row(List, #dbquery{ fields=[{Schema, Fields}] }) ->
     Values = collect_field_values(Fields, List, #{}),
     #row{ schema=Schema, existing=Values }.
 
+-spec collect_field_values([#field{}], [dbval()], rowvals()) -> rowvals().
 collect_field_values([], [], Result) ->
     Result;
 collect_field_values([], MoreCols, _) ->
@@ -248,7 +256,7 @@ encode_val(Fieldname, Val, Schema) ->
 %%     [F#field.name || F <- Fields].
 
 
--spec flat_columns(#schema{}) -> [columns()].
+-spec flat_columns([#field{}]) -> columns().
 flat_columns(Fields) ->
     lists:flatmap(
       fun(F) ->

@@ -12,7 +12,7 @@
 
 -export([get_tuples/1]).
 
--spec get_tuples(any()) -> [[dbval()]].
+-spec get_tuples(any()) -> {ok, [[dbval()]]} | {error, any()}.
 get_tuples({ok, _Cols, Tuples}) when is_list(Tuples) ->
     {ok, to_lists(Tuples)};
 get_tuples({ok, Tuples}) when is_list(Tuples) ->
