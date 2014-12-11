@@ -26,12 +26,6 @@
           fields :: [#field{}]
          }).
 
--record(row, {
-          schema :: #schema{},
-          existing :: rowvals(),
-          new :: rowvals()
-         }).
-
 
 
 -type fieldset() :: [{#schema{}, [#field{}]}].

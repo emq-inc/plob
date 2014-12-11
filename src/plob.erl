@@ -36,7 +36,14 @@
           values :: [erlval()]
          }).
 
--type operation() :: #select{} | #insert{}.
+-record(update, {
+          schema :: #schema{},
+          fields :: [#field{}],
+          values :: [erlval()],
+          where :: where()
+         }).
+
+-type operation() :: #select{} | #insert{} | #update{}.
 
 %%%===================================================================
 %%% Select builders
@@ -66,6 +73,33 @@ insert(Map, Schema) ->
     {Fieldnames, Values} = lists:unzip(maps:to_list(Map)),
     Fields = [get_field(Fieldname, Schema) || Fieldname <- Fieldnames],
     #insert{ schema = Schema, fields = Fields, values = Values }.
+
+-spec update(rowvals(), #schema{}) -> #update{}.
+update(Map, Schema) ->
+    AllVals = maps:to_list(Map),
+    PKNames = case Schema#schema.pk of
+                  Col when is_atom(Col) -> [Col];
+                  Cols when is_list(Cols) -> Cols
+              end,
+    {PKs, Others} = lists:partition(
+                      fun({Fieldname, _Value}) ->
+                              lists:member(Fieldname, PKNames)
+                      end, AllVals),
+
+    case length(PKs) =:= length(PKNames) of
+        true -> ok;
+        false -> throw(missing_pks)
+    end,
+
+    {Fieldnames, Values} = lists:unzip(Others),
+    Fields = [get_field(Fieldname, Schema) || Fieldname <- Fieldnames],
+
+    #update{
+       schema = Schema,
+       fields = Fields,
+       values = Values,
+       where = PKs
+      }.
 
 
 %%%===================================================================
@@ -107,14 +141,26 @@ compile(#insert{schema=Schema, fields=Fields, values=Values}) ->
     #dbquery{
        sql = SQL,
        bindings = Bindings
-      }.
+      };
 
+compile(#update{schema=Schema, fields=Fields, values=Values, where=Where}) ->
+    {SetSQL, Bindings} = compile_sets(Fields, Values),
+    SQL = list_to_binary(
+            [<<"UPDATE ">>, atom_to_list(Schema#schema.table),
+             <<" SET ">>, SetSQL,
+             <<" WHERE ">>, compile_where(Where, length(Bindings) + 1)
+            ]),
+    AllBindings = Bindings ++ bind_where(Where, [{Schema, Fields}]),
+    #dbquery{
+       sql = SQL,
+       bindings = AllBindings
+      }.
 
 %%%===================================================================
 %%% Row API
 %%%===================================================================
 
--spec decode_one(#dbquery{}, #dbresult{}) -> {ok, #row{}} | {error, any()}.
+-spec decode_one(#dbquery{}, #dbresult{}) -> {ok, rowvals()} | {error, any()}.
 decode_one(Query, #dbresult{ raw = Raw, module = Module }) ->
     case Module:get_tuples(Raw) of
         {ok, [List]} ->
@@ -153,11 +199,10 @@ decode(Other, _Val) ->
 %%% Internal row functions
 %%%===================================================================
 
--spec list_to_row([dbval()], #dbquery{}) -> #row{}.
+-spec list_to_row([dbval()], #dbquery{}) -> rowvals().
 % TODO: Join support
-list_to_row(List, #dbquery{ fields=[{Schema, Fields}] }) ->
-    Values = collect_field_values(Fields, List, #{}),
-    #row{ schema=Schema, existing=Values }.
+list_to_row(List, #dbquery{ fields=[{_Schema, Fields}] }) ->
+    collect_field_values(Fields, List, #{}).
 
 -spec collect_field_values([#field{}], [dbval()], rowvals()) -> rowvals().
 collect_field_values([], [], Result) ->
@@ -197,13 +242,50 @@ compile_from(Other) ->
 
 -spec compile_where(where()) -> iodata().
 compile_where(Where) ->
-    compile_where(Where, 1, []).
+    compile_where(Where, 1).
+
+compile_where(Where, InitialCount) ->
+    compile_where(Where, InitialCount, []).
 
 compile_where([], _, Bits) ->
     term_join(Bits, <<" AND ">>, []);
 compile_where([{Name, _Val}|Rest], Count, Bits) when is_atom(Name) ->
     Bit = [atom_to_list(Name), <<" = $">>, integer_to_binary(Count)],
     compile_where(Rest, Count+1, [Bit|Bits]).
+
+
+-spec compile_sets([#field{}], [erlval()]) -> {iodata(), [dbval()]}.
+compile_sets(Fields, Values) ->
+    compile_sets(Fields, Values, 1, [], []).
+
+
+compile_sets([], [], _, RevSets, RevBindings) ->
+    Sets = lists:flatten(lists:reverse(RevSets)),
+    Bindings = lists:flatten(lists:reverse(RevBindings)),
+    {term_join(Sets, <<", ">>), Bindings};
+compile_sets([Field|Fields], [Value|Values], Count, Sets, Bindings) ->
+    {Set, Binding} = compile_set(Field, Value, Count),
+    NewCount = Count + length(Binding),
+    compile_sets(Fields, Values, NewCount, [Set|Sets], [Binding|Bindings]).
+
+compile_set(Field, Value, Count) ->
+    case field_columns(Field) of
+        [Col] ->
+            {compile_set_col(Col, Count),
+             [encode(Field#field.encoder, Value)]};
+        Cols ->
+            Sets = [compile_set_col(Col, Count + I)
+                    || {I, Col} <- lists:zip(lists:seq(0, length(Cols)-1), Cols)],
+            Bindings = [encode(Field#field.encoder, Val)
+                        || Val <- Value],
+            {Sets, Bindings}
+    end.
+
+compile_set_col(Col, Count) ->
+    ColBin = list_to_binary(atom_to_list(Col)),
+    CountBin = integer_to_binary(Count),
+    <<ColBin/binary, " = $", CountBin/binary>>.
+
 
 value_placeholders(Count) ->
     value_placeholders(Count, []).
@@ -338,16 +420,30 @@ decode_test() ->
     {ok, Row} = decode_one(Query, RV(Found)),
     #{ id := 1,
        note := [1,2,3],
-       value := <<"foo">> } = Row#row.existing.
+       value := <<"foo">> } = Row.
 
 
 insert_test() ->
     Schema = ?TEST_SCHEMA_SIMPLE,
     Insert = insert(#{ value => <<"inserted">>,
-                       note => #{ foo => <<"bar">> }}, Schema),
+                       note => #{ foo => <<"bar">> }},
+                    Schema),
     #dbquery{
        sql = <<"INSERT INTO test_table (note, value)",
                " VALUES ($1, $2)",
                " RETURNING id">>,
-       bindings = [<<"{\"foo\":\"bar\"}">>,<<"inserted">>]
+       bindings = [<<"{\"foo\":\"bar\"}">>, <<"inserted">>]
       } = compile(Insert).
+
+
+update_test() ->
+    Schema = ?TEST_SCHEMA_SIMPLE,
+    Update = update(#{ id => 1,
+                       value => <<"inserted">>,
+                       note => #{ foo => <<"bar">> }},
+                    Schema),
+    #dbquery{
+       sql = <<"UPDATE test_table SET note = $1, value = $2 WHERE id = $3">>,
+       bindings = [<<"{\"foo\":\"bar\"}">>, <<"inserted">>, 1]
+      } = compile(Update).
+
