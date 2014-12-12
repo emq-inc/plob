@@ -35,7 +35,7 @@ start_link() ->
 
 
 set_schema(Schema) ->
-    set_schema(Schema#schema.table, Schema).
+    set_schema(Schema#schema.table, munge_schema(Schema)).
 
 set_schema(Name, Schema) ->
     gen_server:call(?SERVER, {set_schema, Name, Schema}).
@@ -94,4 +94,12 @@ code_change(OldVsn, State, Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+munge_schema(Schema) ->
+    Schema#schema{
+      fields = [munge_field(F) || F <- Schema#schema.fields ]
+     }.
+
+munge_field(F) when is_atom(F) -> #field{ name = F };
+munge_field(F) -> F.
 
