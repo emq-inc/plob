@@ -6,10 +6,10 @@
 %%% @end
 %%% Created : 11 Dec 2014 by Brendon Hogger <brendonh@powder>
 %%%-------------------------------------------------------------------
--module(plob).
+-module(plob_query).
 
 -include("plob.hrl").
--include("plob_query.hrl").
+-include("plob_compile.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -export([
@@ -19,9 +19,6 @@
 
          insert/2,
          update/3,
-
-         encode/2,
-         decode/2,
 
          decode_one/2
         ]).
@@ -122,35 +119,6 @@ decode_one(Query, #dbresult{ raw = Raw, module = Module }) ->
 
 
 %%%===================================================================
-%%% Encoding and decoding
-%%%===================================================================
-
--spec encode(codec(), any()) -> any().
-encode({Encoder, _}, Val) -> encode2(Encoder, Val);
-encode(Encoder, Val) -> encode2(Encoder, Val).
-
-
--spec decode(codec(), any()) -> any().
-decode({_, Decoder}, Val) -> decode2(Decoder, Val);
-decode(Decoder, Val) -> decode2(Decoder, Val).
-
-
--spec encode2(encoder(), any()) -> any().
-encode2(undefined, Val) -> Val;
-encode2(json, Val) -> jsx:encode(Val);
-encode2(Fun, Val) when is_function(Fun) -> Fun(Val);
-encode2(Other, _Val) ->
-    throw({no_such_encoder, Other}).
-
--spec decode2(decoder(), any()) -> any().
-decode2(undefined, Val) -> Val;
-decode2(json, Val) -> jsx:decode(Val, [{labels, atom}, return_maps]);
-decode2(Fun, Val) when is_function(Fun) -> Fun(Val);
-decode2(Other, _Val) ->
-    throw({no_such_decoder, Other}).
-
-
-%%%===================================================================
 %%% Internal row functions
 %%%===================================================================
 
@@ -168,7 +136,7 @@ collect_field_values(Fields, [], _) ->
     throw({not_enough_columns, Fields});
 collect_field_values([{Field,_}|Rest], Cols, Result) ->
     {DBVal, NewCols} = collect_field_cols(Field, Cols),
-    Value = decode(Field#field.codec, DBVal),
+    Value = plob_codec:decode(Field#field.codec, DBVal),
     collect_field_values(Rest, NewCols,
                          maps:put(Field#field.name, Value, Result)).
 

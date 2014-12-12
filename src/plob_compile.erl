@@ -9,7 +9,7 @@
 -module(plob_compile).
 
 -include("plob.hrl").
--include("plob_query.hrl").
+-include("plob_compile.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -export([compile/1]).
@@ -145,13 +145,13 @@ field_columns(#field{columns=Columns}) when is_list(Columns) -> Columns.
 -spec field_values(erlval(), #field{}) -> [dbval()].
 field_values(ErlVal, #field{columns=Columns}=Field)
   when is_list(Columns), length(Columns) > 1 ->
-    DBVals = plob:encode(Field#field.codec, ErlVal),
+    DBVals = plob_codec:encode(Field#field.codec, ErlVal),
     case length(DBVals) =:= length(Columns) of
         true -> DBVals;
         false -> throw({wrong_column_count, Field, DBVals})
     end;
 field_values(ErlVal, Field) ->
-    [plob:encode(Field#field.codec, ErlVal)].
+    [plob_codec:encode(Field#field.codec, ErlVal)].
 
 
 -spec term_join([any()], any()) -> [any()].
