@@ -88,7 +88,7 @@ decode_one(Query, #dbresult{ raw = Raw, module = Module }) ->
 -spec decode_all(#dbquery{}, #dbresult{}) -> [rowvals()].
 decode_all(Query, #dbresult{ raw = Raw, module = Module }) ->
     {ok, Lists} = Module:get_tuples(Raw),
-    [plob_query:list_to_row(List, Query) || List <- Lists].
+    [list_to_row(List, Query) || List <- Lists].
 
 %%%===================================================================
 %%% Internal row functions
