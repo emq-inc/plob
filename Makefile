@@ -1,6 +1,6 @@
 PROJECT = plob
 
-DEPS = jsx
+DEPS = jsx lager
 
 include erlang.mk
 

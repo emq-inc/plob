@@ -2,7 +2,7 @@
 %%% @author Brendon Hogger <brendonh@powder>
 %%% @copyright (C) 2014, Brendon Hogger
 %%% @doc
-%%% Simple ORM for PostgreSQL
+%%% High-level interface
 %%% @end
 %%% Created : 13 Dec 2014 by Brendon Hogger <brendonh@powder>
 %%%-------------------------------------------------------------------
@@ -12,6 +12,8 @@
 -include("plob_compile.hrl").
 
 -export([
+         start/0,
+
          get/2,
          find/2,
          insert/2,
@@ -23,7 +25,16 @@
          decode_one/2
         ]).
 
--spec get([erlval()] | rowvals(), #schema{}) -> #dbquery{}.
+-define(SCHEMA(Name), plob_schema_server:get_schema(Name)).
+
+
+start() ->
+    application:ensure_all_started(plob).
+
+
+-spec get([erlval()] | rowvals(), #schema{} | atom()) -> #dbquery{}.
+get(Vals, Schema) when is_atom(Schema) ->
+    get(Vals, ?SCHEMA(Schema));
 get(#{}=Vals, Schema) ->
     PKs = get_pk(Schema),
     PKVals = [maps:get(PK, Vals) || PK <- PKs],
@@ -33,18 +44,24 @@ get(PK, Schema) ->
       plob_query:lookup(PK, plob_query:get_obj(Schema))).
 
 
--spec find(rowvals(), #schema{}) -> #dbquery{}.
+-spec find(rowvals(), #schema{} | atom()) -> #dbquery{}.
+find(Vals, Schema) when is_atom(Schema) ->
+    find(Vals, ?SCHEMA(Schema));
 find(Vals, Schema) ->
     plob_compile:compile(
       plob_query:filter(Vals, Schema, plob_query:get_obj(Schema))).
 
 
--spec insert(rowvals(), #schema{}) -> #dbquery{}.
+-spec insert(rowvals(), #schema{} | atom()) -> #dbquery{}.
+insert(Vals, Schema) when is_atom(Schema) ->
+    insert(Vals, ?SCHEMA(Schema));
 insert(Vals, Schema) ->
     plob_compile:compile(plob_query:insert(Vals, Schema)).
 
 
--spec update(rowvals(), #schema{}) -> #dbquery{}.
+-spec update(rowvals(), #schema{} | atom()) -> #dbquery{}.
+update(Vals, Schema) when is_atom(Schema) ->
+    update(Vals, ?SCHEMA(Schema));
 update(Vals, Schema) ->
     PKNames = get_pk(Schema),
     {PKVals, OtherVals} = 
@@ -65,7 +82,10 @@ update(Vals, Schema) ->
     end,
     update(OtherVals, PKVals, Schema).
 
--spec update(rowvals(), rowvals(), #schema{}) -> #dbquery{}.
+
+-spec update(rowvals(), rowvals(), #schema{} | atom()) -> #dbquery{}.
+update(Vals, Where, Schema) when is_atom(Schema) ->
+    update(Vals, Where, ?SCHEMA(Schema));
 update(Vals, Where, Schema) ->
     plob_compile:compile(plob_query:update(Vals, Where, Schema)).
 

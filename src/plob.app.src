@@ -2,10 +2,12 @@
 	{description, "Simple ORM for PostgreSQL"},
 	{vsn, "0.1.0"},
 	{id, "git"},
+    {mod, {plob_app, []}},
 	{modules, []},
 	{registered, []},
 	{applications, [
 		kernel,
-		stdlib
+		stdlib,
+        lager
 	]}
 ]}.
