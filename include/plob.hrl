@@ -27,4 +27,13 @@
          }).
 
 
+-type fieldval() :: {#field{}, erlval() | undefined}.
+-type schemavals() :: {#schema{}, [fieldval()]}.
+-type fieldset() :: [schemavals()].
+-type bindings() :: [dbval()].
 
+-record(dbquery, {
+          sql :: binary(),
+          fields :: fieldset(),
+          bindings :: bindings()
+         }).

@@ -7,17 +7,6 @@
 %%% Created : 13 Dec 2014 by Brendon Hogger <brendonh@powder>
 %%%-------------------------------------------------------------------
 
--type fieldval() :: {#field{}, erlval() | undefined}.
--type schemavals() :: {#schema{}, [fieldval()]}.
--type fieldset() :: [schemavals()].
-
--type bindings() :: [dbval()].
-
--record(dbquery, {
-          sql :: binary(),
-          fields :: fieldset(),
-          bindings :: bindings()
-         }).
 
 -record(dbresult, {
           raw :: any(),
