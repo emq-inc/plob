@@ -37,3 +37,10 @@
           fields :: fieldset(),
           bindings :: bindings()
          }).
+
+-record(dbresult, {
+          raw :: any(),
+          module :: atom()
+         }).
+
+

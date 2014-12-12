@@ -97,7 +97,7 @@ decode(Query, Result) ->
 
 -spec decode_one(#dbquery{}, #dbresult{}) -> {ok, rowvals()} | {error, any()}.
 decode_one(Query, Result) ->
-    plob_query:deocde_one(Query, Result).
+    plob_query:decode_one(Query, Result).
 
 
 

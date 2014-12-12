@@ -7,13 +7,6 @@
 %%% Created : 13 Dec 2014 by Brendon Hogger <brendonh@powder>
 %%%-------------------------------------------------------------------
 
-
--record(dbresult, {
-          raw :: any(),
-          module :: atom()
-         }).
-
-
 -record(select, {
           fields :: fieldset(),
           where = [] :: fieldset(),
