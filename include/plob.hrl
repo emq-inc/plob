@@ -8,6 +8,7 @@
 
 -type encoder() :: atom() | fun((erlval()) -> dbval()).
 -type decoder() :: atom() | fun((dbval()) -> erlval()).
+-type codec() :: atom() | {encoder(), decoder()}.
 -type validator() :: fun((erlval()) -> ok | {error, any()}).
 
 -type rowvals() :: #{ fieldname() => erlval() }.
@@ -16,8 +17,7 @@
           name :: fieldname(),
           columns :: columns() | undefined,
           validator :: validator() | undefined,
-          encoder :: encoder() | undefined,
-          decoder :: decoder() | undefined
+          codec :: codec()
          }).
 
 -record(schema, {

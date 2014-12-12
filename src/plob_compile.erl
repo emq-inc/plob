@@ -23,7 +23,7 @@ compile(#select{fields=Fields, where=Where, limit=Limit}) ->
     compile_dbquery(
       [<<"SELECT ">>, compile_field_names(Fields),
        <<" FROM ">>, compile_table_names(Fields),
-       <<" WHERE ">>, compile_where(Where),
+       compile_where(Where),
        case Limit of
            undefined -> <<>>;
            Limit when is_integer(Limit) ->
@@ -48,7 +48,7 @@ compile(#update{fields=Fields, where=Where}) ->
     compile_dbquery(
       [<<"UPDATE ">>, compile_table_names(Fields),
        <<" SET ">>, compile_set(Fields),
-       <<" WHERE ">>, compile_where(Where)
+       compile_where(Where)
       ], Fields).
 
 
@@ -115,7 +115,10 @@ compile_field_assigns(Fieldset) ->
 
 -spec compile_where(fieldset()) -> unbound_query().
 compile_where(Fieldset) ->
-    term_join(compile_field_assigns(Fieldset), <<" AND ">>).
+    case compile_field_assigns(Fieldset) of
+        [] -> [];
+        Assigns -> [ <<" WHERE ">> | term_join(Assigns, <<" AND ">>)]
+    end.
 
 -spec compile_set(fieldset()) -> unbound_query().
 compile_set(Fieldset) ->
@@ -142,13 +145,13 @@ field_columns(#field{columns=Columns}) when is_list(Columns) -> Columns.
 -spec field_values(erlval(), #field{}) -> [dbval()].
 field_values(ErlVal, #field{columns=Columns}=Field)
   when is_list(Columns), length(Columns) > 1 ->
-    DBVals = plob:encode(Field#field.encoder, ErlVal),
+    DBVals = plob:encode(Field#field.codec, ErlVal),
     case length(DBVals) =:= length(Columns) of
         true -> DBVals;
         false -> throw({wrong_column_count, Field, DBVals})
     end;
 field_values(ErlVal, Field) ->
-    [plob:encode(Field#field.encoder, ErlVal)].
+    [plob:encode(Field#field.codec, ErlVal)].
 
 
 -spec term_join([any()], any()) -> [any()].
@@ -207,9 +210,13 @@ compile_bindings_test() ->
 
 
 compile_where_test() ->
-    [[<<"one">>, <<" = ">>, #binding{ val=1 }], <<" AND ">>,
+    [<<" WHERE ">>,
+     [<<"one">>, <<" = ">>, #binding{ val=1 }], <<" AND ">>,
      [<<"two">>, <<" = ">>, #binding{ val=2 }], <<" AND ">>,
      [<<"three">>, <<" = ">>, #binding{ val=3 }]] =
         compile_where(
           [{#schema{}, [{#field{name=one}, 1},
                         {#field{columns=[two, three]}, [2,3]} ]}]).
+
+
+    

@@ -40,10 +40,15 @@ lookup(PKVal, #select{ fields=[{Schema, _}]}=Select) ->
 
 -spec filter(rowvals(), #schema{}, #select{}) -> #select{}.
 filter(#{}=Map, Schema, Select) ->
-    case lists:any(fun({S, _}) -> S =:= Schema end,
+    case lists:any(fun({S, _}) -> 
+                           S#schema.table =:= Schema#schema.table
+                   end,
                    Select#select.fields) of
         true -> ok;
-        false -> throw(schema_not_in_fieldset)
+        false -> throw({schema_not_in_fieldset,
+                        Schema#schema.table,
+                        [S#schema.table || 
+                            {S, _} <- Select#select.fields]})
     end,
     Where = map_to_fieldset(Map, Schema),
     Select#select{ where = [Where|Select#select.where] }.
@@ -120,18 +125,28 @@ decode_one(Query, #dbresult{ raw = Raw, module = Module }) ->
 %%% Encoding and decoding
 %%%===================================================================
 
--spec encode(encoder(), any()) -> any().
-encode(undefined, Val) -> Val;
-encode(json, Val) -> jsx:encode(Val);
-encode(Fun, Val) when is_function(Fun) -> Fun(Val);
-encode(Other, _Val) ->
+-spec encode(codec(), any()) -> any().
+encode({Encoder, _}, Val) -> encode2(Encoder, Val);
+encode(Encoder, Val) -> encode2(Encoder, Val).
+
+
+-spec decode(codec(), any()) -> any().
+decode({_, Decoder}, Val) -> decode2(Decoder, Val);
+decode(Decoder, Val) -> decode2(Decoder, Val).
+
+
+-spec encode2(encoder(), any()) -> any().
+encode2(undefined, Val) -> Val;
+encode2(json, Val) -> jsx:encode(Val);
+encode2(Fun, Val) when is_function(Fun) -> Fun(Val);
+encode2(Other, _Val) ->
     throw({no_such_encoder, Other}).
 
--spec decode(decoder(), any()) -> any().
-decode(undefined, Val) -> Val;
-decode(json, Val) -> jsx:decode(Val, [{labels, atom}, return_maps]);
-decode(Fun, Val) when is_function(Fun) -> Fun(Val);
-decode(Other, _Val) ->
+-spec decode2(decoder(), any()) -> any().
+decode2(undefined, Val) -> Val;
+decode2(json, Val) -> jsx:decode(Val, [{labels, atom}, return_maps]);
+decode2(Fun, Val) when is_function(Fun) -> Fun(Val);
+decode2(Other, _Val) ->
     throw({no_such_decoder, Other}).
 
 
@@ -153,7 +168,7 @@ collect_field_values(Fields, [], _) ->
     throw({not_enough_columns, Fields});
 collect_field_values([{Field,_}|Rest], Cols, Result) ->
     {DBVal, NewCols} = collect_field_cols(Field, Cols),
-    Value = decode(Field#field.decoder, DBVal),
+    Value = decode(Field#field.codec, DBVal),
     collect_field_values(Rest, NewCols,
                          maps:put(Field#field.name, Value, Result)).
 
@@ -164,6 +179,8 @@ collect_field_cols(#field{columns=Columns}, Cols) ->
     Count = length(Columns),
     case Count of
         1 -> {hd(Cols), tl(Cols)};
+        X when X > length(Cols) ->
+            throw({not_enough_columns, Columns, Cols});
         _ -> lists:split(Count, Cols)
     end.
 
@@ -218,7 +235,6 @@ get_field2(Fieldname, [_|Rest]) ->
 %%% EUnit
 %%%===================================================================
 
-
 -define(TEST_SCHEMA_SIMPLE,
         #schema{
            table = test_table,
@@ -226,10 +242,22 @@ get_field2(Fieldname, [_|Rest]) ->
            fields = [#field{ name = id },
                      #field{ name = value },
                      #field{ name = note,
-                             encoder = json,
-                             decoder = json }]
+                             codec = json }]
           }).
 
+-define(TEST_SCHEMA_MULTICOL,
+        #schema{
+           table = test_multicol,
+           pk = id,
+           fields = [#field{ name = id },
+                     #field{ name = vals,
+                             columns = [one, two],
+                             codec = {
+                               fun tuple_to_list/1,
+                               fun list_to_tuple/1
+                              } }]
+          }).
+                                        
 
 pkget_test() ->
     #dbquery{
@@ -248,6 +276,16 @@ where_test() ->
        sql = <<"SELECT id, value, note FROM test_table",
                 " WHERE note = $1 AND value = $2">>,
        bindings = [<<"{\"key\":\"something\"}">>, <<"Bob">>]
+      } = plob_compile:compile(Query).
+
+
+multicol_select_test() ->
+    Query = filter(#{ vals => {a, b} }, 
+                   ?TEST_SCHEMA_MULTICOL,
+                   get_obj(?TEST_SCHEMA_MULTICOL)),
+    #dbquery{
+       sql = <<"SELECT id, one, two FROM test_multicol WHERE one = $1 AND two = $2">>,
+       bindings = [a, b]
       } = plob_compile:compile(Query).
 
 
@@ -277,15 +315,25 @@ update_test() ->
 
 
 decode_test() ->
-    Schema = ?TEST_SCHEMA_SIMPLE,
-    Fields = [{F, undefined} || F <- Schema#schema.fields],
-    Query = #dbquery{ fields = [{Schema, Fields}] },
+    Query = #dbquery{ fields = select_all_fields(?TEST_SCHEMA_SIMPLE) },
+
     RV = fun(Raw) -> #dbresult{ raw = Raw, module = plob_epgsql } end,
 
     {error, not_found} = decode_one(Query, RV({ok, []})),
 
-    Found = {ok, [{1, <<"foo">>, <<"[1,2,3]">>}]},
+    Found = {ok, [], [{1, <<"foo">>, <<"[1,2,3]">>}]},
     {ok, Row} = decode_one(Query, RV(Found)),
     #{ id := 1,
        note := [1,2,3],
-       value := <<"foo">> } = Row.
+       value := <<"foo">>
+     } = Row.
+
+multicol_decode_test() ->
+    Query = #dbquery{ fields = select_all_fields(?TEST_SCHEMA_MULTICOL) },
+    Result = #dbresult{ raw = {ok, [], [{1, a, b}]}, module = plob_epgsql },
+    {ok, Row} = decode_one(Query, Result),
+    #{ id := 1,
+       vals := {a,b}
+     } = Row.
+    
+    
