@@ -9,41 +9,22 @@
 -module(plob).
 
 -include("plob.hrl").
+-include("plob_query.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -export([
          get_obj/1,
          lookup/2,
-         filter/2,
+         filter/3,
 
          insert/2,
+         update/3,
 
-         compile/1,
+         encode/2,
+         decode/2,
 
          decode_one/2
         ]).
-
-
--record(select, {
-          fields :: fieldset(),
-          where :: where() | undefined,
-          limit :: integer() | undefined
-         }).
-
--record(insert, {
-          schema :: #schema{},
-          fields :: [#field{}],
-          values :: [erlval()]
-         }).
-
--record(update, {
-          schema :: #schema{},
-          fields :: [#field{}],
-          values :: [erlval()],
-          where :: where()
-         }).
-
--type operation() :: #select{} | #insert{} | #update{}.
 
 %%%===================================================================
 %%% Select builders
@@ -51,17 +32,21 @@
 
 -spec get_obj(#schema{}) -> #select{}.
 get_obj(Schema) ->
-    #select{ fields = [{Schema, Schema#schema.fields}] }.
+    #select{ fields = select_all_fields(Schema) }.
 
 -spec lookup(values(), #select{}) -> #select{}.
 lookup(PKVal, #select{ fields=[{Schema, _}]}=Select) ->
-    Select#select{ where = pk_where(PKVal, Schema) }.
+    Select#select{ where = [pk_where(PKVal, Schema)] }.
 
--spec filter(where() | #{}, #select{}) -> #select{}.
-filter(#{}=Where, Select) ->
-    filter(maps:to_list(Where), Select);
-filter(Where, Select) ->
-    Select#select{ where = Where }.
+-spec filter(rowvals(), #schema{}, #select{}) -> #select{}.
+filter(#{}=Map, Schema, Select) ->
+    case lists:any(fun({S, _}) -> S =:= Schema end,
+                   Select#select.fields) of
+        true -> ok;
+        false -> throw(schema_not_in_fieldset)
+    end,
+    Where = map_to_fieldset(Map, Schema),
+    Select#select{ where = [Where|Select#select.where] }.
 
 
 %%%===================================================================
@@ -70,91 +55,46 @@ filter(Where, Select) ->
 
 -spec insert(rowvals(), #schema{}) -> #insert{}.
 insert(Map, Schema) ->
-    {Fieldnames, Values} = lists:unzip(maps:to_list(Map)),
-    Fields = [get_field(Fieldname, Schema) || Fieldname <- Fieldnames],
-    #insert{ schema = Schema, fields = Fields, values = Values }.
-
--spec update(rowvals(), #schema{}) -> #update{}.
-update(Map, Schema) ->
-    AllVals = maps:to_list(Map),
-    PKNames = case Schema#schema.pk of
-                  Col when is_atom(Col) -> [Col];
-                  Cols when is_list(Cols) -> Cols
-              end,
-    {PKs, Others} = lists:partition(
-                      fun({Fieldname, _Value}) ->
-                              lists:member(Fieldname, PKNames)
-                      end, AllVals),
-
-    case length(PKs) =:= length(PKNames) of
-        true -> ok;
-        false -> throw(missing_pks)
-    end,
-
-    {Fieldnames, Values} = lists:unzip(Others),
-    Fields = [get_field(Fieldname, Schema) || Fieldname <- Fieldnames],
-
-    #update{
-       schema = Schema,
-       fields = Fields,
-       values = Values,
-       where = PKs
-      }.
+    #insert{ fields = [map_to_fieldset(Map, Schema)],
+             return = select_pk_fields(Schema) }.
 
 
-%%%===================================================================
-%%% SQL compilation
-%%%===================================================================
+-spec update(rowvals(), rowvals(), #schema{}) -> #update{}.
+update(Vals, Where, Schema) ->
+    #update{ fields = [map_to_fieldset(Vals, Schema)],
+             where = [map_to_fieldset(Where, Schema)] }.
 
-%% XXX BGH TODO: This could be a bit nicer, especially around bindings
--spec compile(operation()) -> #dbquery{}.
-compile(#select{fields=Fields, where=Where, limit=Limit}) ->
-    SQL = list_to_binary(
-            [<<"SELECT ">>, sql_col_list(Fields),
-             <<" FROM ">>, compile_from(Fields),
-             <<" WHERE ">>, compile_where(Where),
-             case Limit of
-                 undefined -> <<>>;
-                 Limit when is_integer(Limit) ->
-                     LimitBin = integer_to_binary(Limit),
-                     <<" LIMIT ", LimitBin/binary>>
-             end
-            ]),
-    Bindings = bind_where(Where, Fields),
-    #dbquery{
-       sql = SQL,
-       fields = Fields,
-       bindings = Bindings
-      };
 
-compile(#insert{schema=Schema, fields=Fields, values=Values}) ->
-    SQL = list_to_binary(
-            [<<"INSERT INTO ">>, atom_to_list(Schema#schema.table),
-             <<" (">>, term_join(flat_columns(Fields), <<", ">>),
-             <<") VALUES (">>, value_placeholders(length(Fields)),
-             <<") RETURNING ">>, sql_pk_list(Schema)
-            ]),
+%% BGH: This is doing too much for the low-level interface.
+%% Port it to the object interface later.
 
-    Bindings = [encode_val(Field#field.name, Val, Schema)
-                || {Field, Val} <- lists:zip(Fields, Values)],
+%% -spec update(rowvals(), #schema{}) -> #update{}.
+%% update(Map, Schema) ->
+%%     AllVals = maps:to_list(Map),
+%%     PKNames = case Schema#schema.pk of
+%%                   Col when is_atom(Col) -> [Col];
+%%                   Cols when is_list(Cols) -> Cols
+%%               end,
+%%     {PKs, Others} = lists:partition(
+%%                       fun({Fieldname, _Value}) ->
+%%                               lists:member(Fieldname, PKNames)
+%%                       end, AllVals),
 
-    #dbquery{
-       sql = SQL,
-       bindings = Bindings
-      };
+%%     case length(PKs) =:= length(PKNames) of
+%%         true -> ok;
+%%         false -> throw(missing_pks)
+%%     end,
 
-compile(#update{schema=Schema, fields=Fields, values=Values, where=Where}) ->
-    {SetSQL, Bindings} = compile_sets(Fields, Values),
-    SQL = list_to_binary(
-            [<<"UPDATE ">>, atom_to_list(Schema#schema.table),
-             <<" SET ">>, SetSQL,
-             <<" WHERE ">>, compile_where(Where, length(Bindings) + 1)
-            ]),
-    AllBindings = Bindings ++ bind_where(Where, [{Schema, Fields}]),
-    #dbquery{
-       sql = SQL,
-       bindings = AllBindings
-      }.
+%%     {Fieldnames, Values} = lists:unzip(Others),
+%%     Fields = [get_field(Fieldname, Schema) || Fieldname <- Fieldnames],
+
+%%     #update{
+%%        schema = Schema,
+%%        fields = Fields,
+%%        values = Values,
+%%        where = PKs
+%%       }.
+
 
 %%%===================================================================
 %%% Row API
@@ -211,7 +151,7 @@ collect_field_values([], MoreCols, _) ->
     throw({too_many_columns, MoreCols});
 collect_field_values(Fields, [], _) ->
     throw({not_enough_columns, Fields});
-collect_field_values([Field|Rest], Cols, Result) ->
+collect_field_values([{Field,_}|Rest], Cols, Result) ->
     {DBVal, NewCols} = collect_field_cols(Field, Cols),
     Value = decode(Field#field.decoder, DBVal),
     collect_field_values(Rest, NewCols,
@@ -232,124 +172,34 @@ collect_field_cols(#field{columns=Columns}, Cols) ->
 %%% Internal SQL functions
 %%%===================================================================
 
--spec compile_from(fieldset()) -> iodata().
-compile_from([{#schema{table=Table}, _}]) ->
-    atom_to_list(Table);
-% TODO: Joins go here
-compile_from(Other) ->
-    throw({unsupported_from, Other}).
+-spec pk_where(values(), #schema{}) -> schemavals().
+pk_where(Vals, #schema{}=Schema) ->
+    {Schema, pk_fieldvals(Vals, Schema)}.
+
+-spec pk_fieldvals(values(), #schema{}) -> [fieldval()].
+pk_fieldvals(Val, #schema{pk=PK}=Schema) when is_atom(PK) ->
+    [{get_field(PK, Schema), Val}];
+pk_fieldvals(Vals, #schema{pk=PK}=Schema) when is_list(PK) ->
+    lists:zip([get_field(K, Schema) || K <- PK], Vals).
 
 
--spec compile_where(where()) -> iodata().
-compile_where(Where) ->
-    compile_where(Where, 1).
-
-compile_where(Where, InitialCount) ->
-    compile_where(Where, InitialCount, []).
-
-compile_where([], _, Bits) ->
-    term_join(Bits, <<" AND ">>, []);
-compile_where([{Name, _Val}|Rest], Count, Bits) when is_atom(Name) ->
-    Bit = [atom_to_list(Name), <<" = $">>, integer_to_binary(Count)],
-    compile_where(Rest, Count+1, [Bit|Bits]).
+-spec map_to_fieldset(#{}, #schema{}) -> schemavals().
+map_to_fieldset(Map, Schema) ->
+    FieldVals = [{get_field(K, Schema), V}
+                 || {K, V} <- maps:to_list(Map)],
+    {Schema, FieldVals}.
 
 
--spec compile_sets([#field{}], [erlval()]) -> {iodata(), [dbval()]}.
-compile_sets(Fields, Values) ->
-    compile_sets(Fields, Values, 1, [], []).
+-spec select_all_fields(#schema{}) -> fieldset().
+select_all_fields(Schema) ->
+    [{Schema, [{F, undefined} || F <- Schema#schema.fields]}].
 
-
-compile_sets([], [], _, RevSets, RevBindings) ->
-    Sets = lists:flatten(lists:reverse(RevSets)),
-    Bindings = lists:flatten(lists:reverse(RevBindings)),
-    {term_join(Sets, <<", ">>), Bindings};
-compile_sets([Field|Fields], [Value|Values], Count, Sets, Bindings) ->
-    {Set, Binding} = compile_set(Field, Value, Count),
-    NewCount = Count + length(Binding),
-    compile_sets(Fields, Values, NewCount, [Set|Sets], [Binding|Bindings]).
-
-compile_set(Field, Value, Count) ->
-    case field_columns(Field) of
-        [Col] ->
-            {compile_set_col(Col, Count),
-             [encode(Field#field.encoder, Value)]};
-        Cols ->
-            Sets = [compile_set_col(Col, Count + I)
-                    || {I, Col} <- lists:zip(lists:seq(0, length(Cols)-1), Cols)],
-            Bindings = [encode(Field#field.encoder, Val)
-                        || Val <- Value],
-            {Sets, Bindings}
-    end.
-
-compile_set_col(Col, Count) ->
-    ColBin = list_to_binary(atom_to_list(Col)),
-    CountBin = integer_to_binary(Count),
-    <<ColBin/binary, " = $", CountBin/binary>>.
-
-
-value_placeholders(Count) ->
-    value_placeholders(Count, []).
-
-value_placeholders(0, PHs) ->
-    term_join(PHs, <<", ">>);
-value_placeholders(Count, PHs) ->
-    CountBin = integer_to_binary(Count),
-    PH = <<"$", CountBin/binary>>,
-    value_placeholders(Count-1, [PH|PHs]).
-
-
--spec bind_where(where(), fieldset()) -> [dbval()].
-% TODO: Support for join fieldsets
-bind_where(Where, [{Schema, _}]) ->
-    [encode_val(Fieldname, Val, Schema) || {Fieldname, Val} <- Where].
-
-
--spec pk_where(values(), #schema{}) -> where().
-pk_where(Val, #schema{pk=PK}) when is_atom(PK) ->
-    [{PK, Val}];
-pk_where(Vals, #schema{pk=PK}) when is_list(PK) ->
-    lists:zip(PK, Vals).
-
--spec sql_col_list(fieldset()) -> iodata().
-sql_col_list(FieldSet) ->
-    term_join(sql_col_list(FieldSet, []), <<", ">>).
-
-sql_col_list([], Cols) ->
-    lists:flatten(lists:reverse(Cols));
-sql_col_list([{_Schema, Fields}|Rest], AllCols) ->
-    Cols = flat_columns(Fields),
-    sql_col_list(Rest, [Cols|AllCols]).
-
--spec sql_pk_list(#schema{}) -> iodata().
-sql_pk_list(#schema{pk=PK}) when is_atom(PK) ->
-    atom_to_list(PK);
-sql_pk_list(#schema{pk=PKs}) when is_list(PKs) ->
-    term_join([atom_to_list(Col) || Col <- PKs], <<", ">>).
-
-
--spec encode_val(fieldname(), erlval(), #schema{}) -> dbval().
-encode_val(Fieldname, Val, Schema) ->
-    Field = get_field(Fieldname, Schema),
-    encode(Field#field.encoder, Val).
-
-
-%% -spec all_fieldnames(#schema{}) -> [fieldname()].
-%% all_fieldnames(#schema{fields=Fields}) ->
-%%     [F#field.name || F <- Fields].
-
-
--spec flat_columns([#field{}]) -> columns().
-flat_columns(Fields) ->
-    lists:flatmap(
-      fun(F) ->
-              [list_to_binary(atom_to_list(Col))
-               || Col <- field_columns(F)]
-      end,
-      Fields).
-
--spec field_columns(#field{}) -> columns().
-field_columns(#field{name=Name, columns=undefined}) -> [Name];
-field_columns(#field{columns=Columns}) -> Columns.
+-spec select_pk_fields(#schema{}) -> fieldset().
+select_pk_fields(#schema{pk=PK}=Schema) when is_atom(PK) ->
+    [{Schema, [{get_field(PK, Schema), undefined}]}];
+select_pk_fields(#schema{pk=PK}=Schema) when is_list(PK) ->
+    [{Schema, [{get_field(F, Schema), undefined}
+               || F <- PK]}].
 
 
 -spec get_field(fieldname(), #schema{}) -> #field{}.
@@ -362,18 +212,6 @@ get_field2(Fieldname, [#field{name=Fieldname}=Field|_]) ->
     Field;
 get_field2(Fieldname, [_|Rest]) ->
     get_field2(Fieldname, Rest).
-
-
--spec term_join([any()], any()) -> [any()].
-term_join(Parts, Sep) ->
-    lists:reverse(term_join(Parts, Sep, [])).
-
-term_join([], _, Bits) ->
-    Bits;
-term_join([Last], _, Bits) ->
-    [Last|Bits];
-term_join([Next|Rest], Sep, Bits) ->
-    term_join(Rest, Sep, [Sep,Next|Bits]).
 
 
 %%%===================================================================
@@ -398,29 +236,19 @@ pkget_test() ->
        sql = <<"SELECT id, value, note FROM test_table",
                " WHERE id = $1">>,
        bindings = [1]
-      } = compile(lookup(1, get_obj(?TEST_SCHEMA_SIMPLE))).
+      } = plob_compile:compile(lookup(1, get_obj(?TEST_SCHEMA_SIMPLE))).
+
 
 where_test() ->
+    Query = filter(#{ note => #{ key => <<"something">> },
+                      value => <<"Bob">>
+                    }, ?TEST_SCHEMA_SIMPLE,
+                   get_obj(?TEST_SCHEMA_SIMPLE)),
     #dbquery{
        sql = <<"SELECT id, value, note FROM test_table",
                 " WHERE note = $1 AND value = $2">>,
        bindings = [<<"{\"key\":\"something\"}">>, <<"Bob">>]
-      } = compile(filter(#{ note => #{ key => <<"something">> },
-                            value => <<"Bob">>
-                          }, get_obj(?TEST_SCHEMA_SIMPLE))).
-
-decode_test() ->
-    Schema = ?TEST_SCHEMA_SIMPLE,
-    Query = #dbquery{ fields = [{Schema, Schema#schema.fields}] },
-    RV = fun(Raw) -> #dbresult{ raw = Raw, module = plob_epgsql } end,
-
-    {error, not_found} = decode_one(Query, RV({ok, []})),
-
-    Found = {ok, [{1, <<"foo">>, <<"[1,2,3]">>}]},
-    {ok, Row} = decode_one(Query, RV(Found)),
-    #{ id := 1,
-       note := [1,2,3],
-       value := <<"foo">> } = Row.
+      } = plob_compile:compile(Query).
 
 
 insert_test() ->
@@ -433,17 +261,31 @@ insert_test() ->
                " VALUES ($1, $2)",
                " RETURNING id">>,
        bindings = [<<"{\"foo\":\"bar\"}">>, <<"inserted">>]
-      } = compile(Insert).
+      } = plob_compile:compile(Insert).
 
 
 update_test() ->
     Schema = ?TEST_SCHEMA_SIMPLE,
-    Update = update(#{ id => 1,
-                       value => <<"inserted">>,
+    Update = update(#{ value => <<"inserted">>,
                        note => #{ foo => <<"bar">> }},
+                    #{ id => 1 },
                     Schema),
     #dbquery{
        sql = <<"UPDATE test_table SET note = $1, value = $2 WHERE id = $3">>,
        bindings = [<<"{\"foo\":\"bar\"}">>, <<"inserted">>, 1]
-      } = compile(Update).
+      } = plob_compile:compile(Update).
 
+
+decode_test() ->
+    Schema = ?TEST_SCHEMA_SIMPLE,
+    Fields = [{F, undefined} || F <- Schema#schema.fields],
+    Query = #dbquery{ fields = [{Schema, Fields}] },
+    RV = fun(Raw) -> #dbresult{ raw = Raw, module = plob_epgsql } end,
+
+    {error, not_found} = decode_one(Query, RV({ok, []})),
+
+    Found = {ok, [{1, <<"foo">>, <<"[1,2,3]">>}]},
+    {ok, Row} = decode_one(Query, RV(Found)),
+    #{ id := 1,
+       note := [1,2,3],
+       value := <<"foo">> } = Row.

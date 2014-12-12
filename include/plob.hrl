@@ -28,18 +28,3 @@
 
 
 
--type fieldset() :: [{#schema{}, [#field{}]}].
--type where() :: [{fieldname(), erlval()}].
--type sql() :: binary().
--type bindings() :: [dbval()].
-
--record(dbquery, {
-          sql :: binary(),
-          fields :: fieldset(),
-          bindings :: bindings()
-         }).
-
--record(dbresult, {
-          raw :: any(),
-          module :: atom()
-         }).
