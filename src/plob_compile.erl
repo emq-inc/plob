@@ -2,7 +2,7 @@
 %%% @author Brendon Hogger <brendonh@powder>
 %%% @copyright (C) 2014, Brendon Hogger
 %%% @doc
-%%% SQL compiler
+%%% SQL compilation
 %%% @end
 %%% Created : 13 Dec 2014 by Brendon Hogger <brendonh@powder>
 %%%-------------------------------------------------------------------

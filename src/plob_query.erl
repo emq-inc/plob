@@ -2,7 +2,7 @@
 %%% @author Brendon Hogger <brendonh@powder>
 %%% @copyright (C) 2014, Brendon Hogger
 %%% @doc
-%%% Simple ORM for PostgreSQL
+%%% Low-level query builder and decoder
 %%% @end
 %%% Created : 11 Dec 2014 by Brendon Hogger <brendonh@powder>
 %%%-------------------------------------------------------------------
@@ -20,7 +20,8 @@
          insert/2,
          update/3,
 
-         decode_one/2
+         decode_one/2,
+         decode_all/2
         ]).
 
 %%%===================================================================
@@ -67,37 +68,6 @@ update(Vals, Where, Schema) ->
              where = [map_to_fieldset(Where, Schema)] }.
 
 
-%% BGH: This is doing too much for the low-level interface.
-%% Port it to the object interface later.
-
-%% -spec update(rowvals(), #schema{}) -> #update{}.
-%% update(Map, Schema) ->
-%%     AllVals = maps:to_list(Map),
-%%     PKNames = case Schema#schema.pk of
-%%                   Col when is_atom(Col) -> [Col];
-%%                   Cols when is_list(Cols) -> Cols
-%%               end,
-%%     {PKs, Others} = lists:partition(
-%%                       fun({Fieldname, _Value}) ->
-%%                               lists:member(Fieldname, PKNames)
-%%                       end, AllVals),
-
-%%     case length(PKs) =:= length(PKNames) of
-%%         true -> ok;
-%%         false -> throw(missing_pks)
-%%     end,
-
-%%     {Fieldnames, Values} = lists:unzip(Others),
-%%     Fields = [get_field(Fieldname, Schema) || Fieldname <- Fieldnames],
-
-%%     #update{
-%%        schema = Schema,
-%%        fields = Fields,
-%%        values = Values,
-%%        where = PKs
-%%       }.
-
-
 %%%===================================================================
 %%% Row API
 %%%===================================================================
@@ -109,14 +79,16 @@ decode_one(Query, #dbresult{ raw = Raw, module = Module }) ->
             {ok, list_to_row(List, Query)};
         {ok, []} ->
             {error, not_found};
-        {error, Error} ->
-            {error, Error};
-        Other when is_list(Other) ->
+        {ok, Other} when is_list(Other) ->
             {error, multiple_results};
-        Other ->
-            throw({error, {unexpected, Other}})
+        {error, Error} ->
+            {error, Error}
     end.
 
+-spec decode_all(#dbquery{}, #dbresult{}) -> [rowvals()].
+decode_all(Query, #dbresult{ raw = Raw, module = Module }) ->
+    {ok, Lists} = Module:get_tuples(Raw),
+    [plob_query:list_to_row(List, Query) || List <- Lists].
 
 %%%===================================================================
 %%% Internal row functions
