@@ -49,8 +49,14 @@ compile(#update{fields=Fields, where=Where}) ->
       [<<"UPDATE ">>, compile_table_names(Fields),
        <<" SET ">>, compile_set(Fields),
        compile_where(Where)
-      ], Fields).
+      ], Fields);
 
+compile(#delete{where=Where}) ->
+    only_one_schema(Where),
+    compile_dbquery(
+      [<<"DELETE FROM ">>, compile_table_names(Where),
+       compile_where(Where)
+      ], null).
 
 -spec only_one_schema(fieldset()) -> ok.
 only_one_schema([{_Schema, _}]) -> ok;

@@ -20,6 +20,7 @@
          
          update/2,
          update/3,
+         delete/2,
 
          decode/2,
          decode_one/2
@@ -89,6 +90,12 @@ update(Vals, Where, Schema) when is_atom(Schema) ->
 update(Vals, Where, Schema) ->
     plob_compile:compile(plob_query:update(Vals, Where, Schema)).
 
+
+-spec delete(rowvals(), #schema{} | atom()) -> #dbquery{}.
+delete(Where, Schema) when is_atom(Schema) ->
+    delete(Where, ?SCHEMA(Schema));
+delete(Where, Schema) ->
+    plob_compile:compile(plob_query:delete(Where, Schema)).
 
 -spec decode(#dbquery{}, #dbresult{}) -> [rowvals()].
 decode(Query, Result) ->

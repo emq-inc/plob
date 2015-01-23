@@ -19,6 +19,7 @@
 
          insert/2,
          update/3,
+         delete/2,
 
          decode_one/2,
          decode_all/2
@@ -53,7 +54,7 @@ filter(#{}=Map, Schema, Select) ->
 
 
 %%%===================================================================
-%%% Insert / update builders
+%%% Query builders
 %%%===================================================================
 
 -spec insert(rowvals(), #schema{}) -> #insert{}.
@@ -66,6 +67,10 @@ insert(Map, Schema) ->
 update(Vals, Where, Schema) ->
     #update{ fields = [map_to_fieldset(Vals, Schema)],
              where = [map_to_fieldset(Where, Schema)] }.
+
+-spec delete(rowvals(), #schema{}) -> #delete{}.
+delete(Where, Schema) ->
+    #delete{ where = [map_to_fieldset(Where, Schema)] }.
 
 
 %%%===================================================================
@@ -253,6 +258,13 @@ update_test() ->
        bindings = [<<"{\"foo\":\"bar\"}">>, <<"inserted">>, 1]
       } = plob_compile:compile(Update).
 
+delete_test() ->
+    Schema = ?TEST_SCHEMA_SIMPLE,
+    Delete = delete(#{ value => <<"Bob">> }, Schema),
+    #dbquery{
+       sql = <<"DELETE FROM test_table WHERE value = $1">>,
+       bindings = [<<"Bob">>]
+      } = plob_compile:compile(Delete).
 
 decode_test() ->
     Query = #dbquery{ fields = select_all_fields(?TEST_SCHEMA_SIMPLE) },

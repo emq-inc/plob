@@ -23,6 +23,10 @@
           where :: fieldset()
          }).
 
+-record(delete, {
+          where :: fieldset()
+         }).
+
 -type operation() :: #select{} | #insert{} | #update{}.
 
 -record(binding, {
