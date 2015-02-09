@@ -146,6 +146,7 @@ field_colnames(Field) ->
 
 -spec field_columns(#field{}) -> columns().
 field_columns(#field{name=Name, columns=undefined}) -> [Name];
+field_columns(#field{columns=Column}) when is_atom(Column) -> [Column];
 field_columns(#field{columns=Columns}) when is_list(Columns) -> Columns.
 
 -spec field_values(erlval(), #field{}) -> [dbval()].
