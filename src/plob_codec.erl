@@ -22,6 +22,7 @@ encode(Encoder, Val) -> encode2(Encoder, Val).
 
 -spec encode2(encoder(), any()) -> any().
 encode2(undefined, Val) -> Val;
+encode2(datetime, Val) -> Val;
 encode2(json, Val) -> jsx:encode(Val);
 encode2(Fun, Val) when is_function(Fun) -> Fun(Val);
 encode2(Other, _Val) ->
@@ -35,6 +36,8 @@ decode(Decoder, Val) -> decode2(Decoder, Val).
 
 -spec decode2(decoder(), any()) -> any().
 decode2(undefined, Val) -> Val;
+%% Round off microseconds as a convenience to make jsx encoder happy.
+decode2(datetime, {{_,_,_}=Date, {H,M,SMS}}) -> {Date, {H, M, round(SMS)}};
 decode2(json, Val) -> jsx:decode(Val, [{labels, atom}, return_maps]);
 decode2(Fun, Val) when is_function(Fun) -> Fun(Val);
 decode2(Other, _Val) ->

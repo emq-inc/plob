@@ -120,6 +120,8 @@ collect_field_values([{Field,_}|Rest], Cols, Result) ->
 
 collect_field_cols(#field{columns=undefined}, [Col|Rest]) ->
     {Col, Rest};
+collect_field_cols(#field{columns=Column}, [Col|Rest]) when is_atom(Column) ->
+    {Col, Rest};
 collect_field_cols(#field{columns=Columns}, Cols) ->
     Count = length(Columns),
     case Count of
