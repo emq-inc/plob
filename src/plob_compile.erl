@@ -87,15 +87,32 @@ compile_dbquery(Query, Fields) ->
 compile_bindings(Unbound) ->
     {Query, Bindings, _} =
         lists:foldl(
-          fun(#binding{val=Val}, {Q, B, Count}) ->
-                  CountBin = integer_to_binary(Count),
-                  {[<<"$", CountBin/binary>>|Q],
-                   [Val|B], Count+1};
+          fun(#binding{}=Binding, {Q, B, Count}) ->
+                  {[get_placeholder(Binding, Count)|Q],
+                   [get_binding_val(Binding)|B], Count+1};
              (Bin, {Q, B, Count}) when is_binary(Bin) ->
                   {[Bin|Q], B, Count}
           end,
           {[], [], 1}, lists:flatten(Unbound)),
     {lists:reverse(Query), lists:reverse(Bindings)}.
+
+
+get_placeholder(#binding{ val = {any, _} }, Count) ->
+    PH = get_placeholder(Count),
+    <<"ANY(", PH/binary, ")">>;
+get_placeholder(#binding{}, Count) ->
+    get_placeholder(Count).
+
+get_placeholder(Count) ->
+    CountBin = integer_to_binary(Count),
+    <<"$", CountBin/binary>>.
+
+
+get_binding_val(#binding{ val = {any, Val} }) ->
+    Val;
+get_binding_val(#binding{ val = Val }) ->
+    Val.
+
 
 
 -spec compile_table_names(fieldset()) -> iodata().
@@ -163,6 +180,9 @@ field_values(ErlVal, #field{columns=Columns}=Field)
         true -> [{?EQ, V} || V <- DBVals];
         false -> throw({wrong_column_count, Field, DBVals})
     end;
+field_values({op, in, Vals}, Field) ->
+    [{<<" = ">>, {any, [plob_codec:encode(Field#field.codec, Val)
+                        || Val <- Vals]}}];
 field_values(ErlVal, Field) ->
     {Op, Val} = case ErlVal of
                     {op, O, V} -> {normalize_operator(O), V};
@@ -184,7 +204,9 @@ term_join([Next|Rest], Sep, Bits) ->
 
 normalize_operator(Op) when is_list(Op) ->
     OpBin = list_to_binary(Op),
-    <<$\s, OpBin/binary, $\s>>.
+    <<$\s, OpBin/binary, $\s>>;
+normalize_operator(Op) -> Op.
+
 
 
 %%%===================================================================
@@ -235,7 +257,9 @@ compile_where_test() ->
     [<<" WHERE ">>,
      [<<"one">>, <<" > ">>, #binding{ val=1 }], <<" AND ">>,
      [<<"two">>, ?EQ, #binding{ val=2 }], <<" AND ">>,
-     [<<"three">>, ?EQ, #binding{ val=3 }]] =
+     [<<"three">>, ?EQ, #binding{ val=3 }], <<" AND ">>,
+     [<<"four">>, <<" IN ">>, #binding{ val=[4,5] }]] =
         compile_where(
           [{#schema{}, [{#field{name=one}, {op, ">", 1}},
-                        {#field{columns=[two, three]}, [2, 3]} ]}]).
+                        {#field{columns=[two, three]}, [2, 3]},
+                        {#field{name=four}, {op, in, [4,5]}}]}]).
