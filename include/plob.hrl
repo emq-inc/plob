@@ -2,6 +2,7 @@
 
 -type dbval() :: any().
 -type erlval() :: any().
+-type operator() :: binary().
 
 -type columns() :: fieldname() | [fieldname()].
 -type values() :: erlval() | [erlval()].
@@ -27,10 +28,13 @@
          }).
 
 
--type fieldval() :: {#field{}, erlval() | undefined}.
+-type fieldop() :: {op, operator(), erlval()}.
+
+-type fieldval() :: {#field{}, erlval() | fieldop() | undefined}.
 -type schemavals() :: {#schema{}, [fieldval()]}.
 -type fieldset() :: [schemavals()].
 -type bindings() :: [dbval()].
+
 
 -record(dbquery, {
           sql :: binary(),

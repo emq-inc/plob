@@ -13,3 +13,6 @@ clean_all:
 
 test: app
 	erl -pa `$(REBAR3) path` -noshell -s plob_compile test -s plob_query test -s init stop
+
+shell: app
+	$(REBAR3) shell

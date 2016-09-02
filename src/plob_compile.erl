@@ -18,6 +18,8 @@
 %%% Queries
 %%%===================================================================
 
+-define(EQ, <<" = ">>).
+
 -spec compile(operation()) -> #dbquery{}.
 compile(#select{fields=Fields, where=Where, limit=Limit}) ->
     compile_dbquery(
@@ -115,7 +117,7 @@ compile_field_names(Fieldset) ->
 
 -spec compile_field_assigns(fieldset()) -> unbound_query().
 compile_field_assigns(Fieldset) ->
-    [[Binding#binding.col, <<" = ">>, Binding]
+    [[Binding#binding.col, Binding#binding.op, Binding]
      || Binding <- prepare_bindings(Fieldset)].
 
 
@@ -133,11 +135,11 @@ compile_set(Fieldset) ->
 
 -spec prepare_bindings(fieldset()) -> [#binding{}].
 prepare_bindings(Fieldset) ->
-    [#binding{ col=Col, val=DBVal }
+    [#binding{ col=Col, op=Op, val=DBVal }
      || {_Schema, FieldVals} <- Fieldset,
         {Field, ErlVal} <- FieldVals,
-        {Col, DBVal} <- lists:zip(field_colnames(Field),
-                                  field_values(ErlVal, Field))].
+        {Col, {Op, DBVal}} <- lists:zip(field_colnames(Field),
+                                        field_values(ErlVal, Field))].
 
 -spec field_colnames(#field{}) -> [binary()].
 field_colnames(Field) ->
@@ -152,13 +154,21 @@ field_columns(#field{columns=Columns}) when is_list(Columns) -> Columns.
 -spec field_values(erlval(), #field{}) -> [dbval()].
 field_values(ErlVal, #field{columns=Columns}=Field)
   when is_list(Columns), length(Columns) > 1 ->
+    case ErlVal of
+        {op, _, _} -> throw({unsupported, operator_on_multicol});
+        _ -> ok
+    end,
     DBVals = plob_codec:encode(Field#field.codec, ErlVal),
     case length(DBVals) =:= length(Columns) of
-        true -> DBVals;
+        true -> [{?EQ, V} || V <- DBVals];
         false -> throw({wrong_column_count, Field, DBVals})
     end;
 field_values(ErlVal, Field) ->
-    [plob_codec:encode(Field#field.codec, ErlVal)].
+    {Op, Val} = case ErlVal of
+                    {op, O, V} -> {normalize_operator(O), V};
+                    V -> {?EQ, V}
+                end,
+    [{Op, plob_codec:encode(Field#field.codec, Val)}].
 
 
 -spec term_join([any()], any()) -> [any()].
@@ -172,6 +182,10 @@ term_join([Last], _, Bits) ->
 term_join([Next|Rest], Sep, Bits) ->
     term_join(Rest, Sep, [Sep,Next|Bits]).
 
+normalize_operator(Op) when is_list(Op) ->
+    OpBin = list_to_binary(Op),
+    <<$\s, OpBin/binary, $\s>>.
+
 
 %%%===================================================================
 %%% EUnit tests
@@ -183,9 +197,10 @@ field_columns_test() ->
     [one,two] = field_columns(#field{columns=[one,two]}).
 
 field_values_test() ->
-    [val] = field_values(val, #field{name=one}),
-    [val] = field_values(val, #field{columns=[one]}),
-    [foo, bar] = field_values([foo,bar], #field{columns=[one,two]}).
+    [{?EQ, val}] = field_values(val, #field{name=one}),
+    [{<<" > ">>, val}] = field_values({op, ">", val}, #field{name=one}),
+    [{?EQ, val}] = field_values(val, #field{columns=[one]}),
+    [{?EQ, foo}, {?EQ, bar}] = field_values([foo,bar], #field{columns=[one,two]}).
 
 compile_table_names_test() ->
     [<<"sometable">>] = compile_table_names(
@@ -206,24 +221,21 @@ prepare_bindings_test() ->
                         {#field{columns=[two, three]}, [2,3]} ]}]).
 
 compile_bindings_test() ->
-    Unbound = [[<<"one">>, <<" = ">>, #binding{ val=1 }], <<", ">>,
-               [<<"two">>, <<" = ">>, #binding{ val=2 }], <<", ">>,
-               [<<"threefour">>, <<" = ">>, #binding{ val=[3,4] }]],
-    Bound = [<<"one">>, <<" = ">>, <<"$1">>, <<", ">>,
-             <<"two">>, <<" = ">>, <<"$2">>, <<", ">>,
-             <<"threefour">>, <<" = ">>, <<"$3">>],
+    Unbound = [[<<"one">>, ?EQ, #binding{ val=1 }], <<", ">>,
+               [<<"two">>, ?EQ, #binding{ val=2 }], <<", ">>,
+               [<<"threefour">>, ?EQ, #binding{ val=[3,4] }]],
+    Bound = [<<"one">>, ?EQ, <<"$1">>, <<", ">>,
+             <<"two">>, ?EQ, <<"$2">>, <<", ">>,
+             <<"threefour">>, ?EQ, <<"$3">>],
     Vals = [1, 2, [3, 4]],
     {Bound, Vals} = compile_bindings(Unbound).
 
 
 compile_where_test() ->
     [<<" WHERE ">>,
-     [<<"one">>, <<" = ">>, #binding{ val=1 }], <<" AND ">>,
-     [<<"two">>, <<" = ">>, #binding{ val=2 }], <<" AND ">>,
-     [<<"three">>, <<" = ">>, #binding{ val=3 }]] =
+     [<<"one">>, <<" > ">>, #binding{ val=1 }], <<" AND ">>,
+     [<<"two">>, ?EQ, #binding{ val=2 }], <<" AND ">>,
+     [<<"three">>, ?EQ, #binding{ val=3 }]] =
         compile_where(
-          [{#schema{}, [{#field{name=one}, 1},
-                        {#field{columns=[two, three]}, [2,3]} ]}]).
-
-
-    
+          [{#schema{}, [{#field{name=one}, {op, ">", 1}},
+                        {#field{columns=[two, three]}, [2, 3]} ]}]).

@@ -31,6 +31,7 @@
 
 -record(binding, {
           col :: binary(),
+          op = <<"=">> :: binary(),
           val :: dbval()
          }).
 

@@ -4,3 +4,4 @@ ebin/*
 deps
 _build
 rebar.lock
+log
