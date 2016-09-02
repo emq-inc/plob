@@ -2,3 +2,5 @@
 *.dump
 ebin/*
 deps
+_build
+rebar.lock

@@ -1,8 +1,15 @@
-PROJECT = plob
+REBAR3 = "rebar3"
 
-DEPS = jsx lager
+all: app
 
-include erlang.mk
+app:
+	$(REBAR3) compile
 
-test: clean app
-	erl -pa ebin -noshell -s plob_compile test -s plob_query test -s init stop
+clean:
+	$(REBAR3) clean
+
+clean_all:
+	$(REBAR3) clean --all
+
+test: app
+	erl -pa `$(REBAR3) path` -noshell -s plob_compile test -s plob_query test -s init stop
