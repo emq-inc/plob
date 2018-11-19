@@ -88,8 +88,14 @@ compile_bindings(Unbound) ->
     {Query, Bindings, _} =
         lists:foldl(
           fun(#binding{}=Binding, {Q, B, Count}) ->
-                  {[get_placeholder(Binding, Count)|Q],
-                   [get_binding_val(Binding)|B], Count+1};
+                  case Binding#binding.val of
+                      {sql, Literal} ->
+                          {[Literal|Q], B, Count};
+                      _ ->
+                          {[get_placeholder(Binding, Count)|Q],
+                           [get_binding_val(Binding)|B], Count+1}
+                  end;
+             % BGH: Is this used? For what?
              (Bin, {Q, B, Count}) when is_binary(Bin) ->
                   {[Bin|Q], B, Count}
           end,
