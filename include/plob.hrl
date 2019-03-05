@@ -1,4 +1,4 @@
--type fieldname() :: atom().
+-type fieldname() :: atom() | {alias, atom(), atom()}.
 
 -type dbval() :: any().
 -type erlval() :: any().

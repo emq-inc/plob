@@ -7,11 +7,12 @@
 %%% Created : 13 Dec 2014 by Brendon Hogger <brendonh@powder>
 %%%-------------------------------------------------------------------
 
--record(select, {
-          fields :: fieldset(),
-          where = [] :: fieldset(),
-          limit :: integer() | undefined
-         }).
+-record(select, { fields :: fieldset(),
+                  where = [] :: fieldset(),
+                  limit :: integer() | undefined,
+                  offset :: integer() | undefined,
+                  order :: binary() | undefined
+                }).
 
 -record(insert, {
           fields :: fieldset(),

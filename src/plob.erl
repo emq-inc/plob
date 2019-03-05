@@ -16,6 +16,7 @@
 
          get/2,
          find/2,
+         find/3,
          insert/2,
          
          update/2,
@@ -46,11 +47,18 @@ get(PK, Schema) ->
 
 
 -spec find(rowvals(), #schema{} | atom()) -> #dbquery{}.
-find(Vals, Schema) when is_atom(Schema) ->
-    find(Vals, ?SCHEMA(Schema));
 find(Vals, Schema) ->
+    find(Vals, Schema, #{}).
+
+-spec find(rowvals(), #schema{} | atom(), map()) -> #dbquery{}.
+find(Vals, Schema, Opts) when is_atom(Schema) ->
+    find(Vals, ?SCHEMA(Schema), Opts);
+find(Vals, Schema, Opts) ->
+    Filter = plob_query:filter(Vals, Schema, plob_query:get_obj(Schema)),
     plob_compile:compile(
-      plob_query:filter(Vals, Schema, plob_query:get_obj(Schema))).
+      Filter#select{ limit = maps:get(limit, Opts, undefined),
+                     offset = maps:get(offset, Opts, undefined),
+                     order = maps:get(order, Opts, undefined) }).
 
 
 -spec insert(rowvals(), #schema{} | atom()) -> #dbquery{}.

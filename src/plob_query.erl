@@ -167,6 +167,10 @@ select_pk_fields(#schema{pk=PK}=Schema) when is_list(PK) ->
 
 
 -spec get_field(fieldname(), #schema{}) -> #field{}.
+get_field({alias, Fieldname, _Alias}, Schema) ->
+    % BGH: Currently this just allows repeating fields,
+    % not actually aliasing them.
+    get_field(Fieldname, Schema);
 get_field(Fieldname, #schema{}=Schema) ->
     get_field2(Fieldname, Schema#schema.fields).
 

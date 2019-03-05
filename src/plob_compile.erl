@@ -21,16 +21,28 @@
 -define(EQ, <<" = ">>).
 
 -spec compile(operation()) -> #dbquery{}.
-compile(#select{fields=Fields, where=Where, limit=Limit}) ->
+compile(#select{fields=Fields, where=Where, limit=Limit, offset=Offset, order=Order }) ->
     compile_dbquery(
       [<<"SELECT ">>, compile_field_names(Fields),
        <<" FROM ">>, compile_table_names(Fields),
        compile_where(Where),
+       case Order of
+           undefined -> <<>>;
+           Order when is_binary(Order) ->
+               % BGH: This should probably have some proper syntax
+               <<" ORDER BY ", Order/binary>>
+       end,
        case Limit of
            undefined -> <<>>;
            Limit when is_integer(Limit) ->
                LimitBin = integer_to_binary(Limit),
                <<" LIMIT ", LimitBin/binary>>
+       end,
+       case Offset of
+           undefined -> <<>>;
+           Offset when is_integer(Offset) ->
+               OffsetBin = integer_to_binary(Offset),
+               <<" OFFSET ", OffsetBin/binary>>
        end
       ], Fields);
 
