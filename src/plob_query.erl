@@ -160,6 +160,8 @@ select_all_fields(Schema) ->
     [{Schema, [{F, undefined} || F <- Schema#schema.fields]}].
 
 -spec select_pk_fields(#schema{}) -> fieldset().
+select_pk_fields(#schema{pk=undefined}=Schema) ->
+    select_all_fields(Schema);
 select_pk_fields(#schema{pk=PK}=Schema) when is_atom(PK) ->
     [{Schema, [{get_field(PK, Schema), undefined}]}];
 select_pk_fields(#schema{pk=PK}=Schema) when is_list(PK) ->
