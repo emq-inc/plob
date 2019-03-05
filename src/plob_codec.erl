@@ -17,6 +17,7 @@
 
 
 -spec encode(codec(), any()) -> any().
+encode(_, {sql, _}=Val) -> Val;
 encode({Encoder, _}, Val) -> encode2(Encoder, Val);
 encode(Encoder, Val) -> encode2(Encoder, Val).
 
