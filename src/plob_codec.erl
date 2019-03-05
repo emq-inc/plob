@@ -24,6 +24,9 @@ encode(Encoder, Val) -> encode2(Encoder, Val).
 encode2(_Codec, null) -> null;
 encode2(undefined, Val) -> Val;
 encode2(datetime, Val) -> Val;
+encode2(datetimetz, Val) ->
+    Unix = integer_to_binary(qdate:to_unixtime(Val)),
+    {sql, <<"to_timestamp(", Unix/binary, ")">>};
 encode2(atom, Val) -> atom_to_binary(Val, latin1);
 encode2(json, Val) -> jsx:encode(Val);
 encode2(Fun, Val) when is_function(Fun) -> Fun(Val);
@@ -41,6 +44,7 @@ decode2(_Codec, null) -> null;
 decode2(undefined, Val) -> Val;
 %% Round off microseconds as a convenience to make jsx encoder happy.
 decode2(datetime, {{_,_,_}=Date, {H,M,SMS}}) -> {Date, {H, M, round(SMS)}};
+decode2(datetimetz, {{_,_,_}=Date, {H,M,SMS}}) -> {Date, {H, M, round(SMS)}};
 decode2(json, Val) -> jsx:decode(Val, [{labels, atom}, return_maps]);
 decode2(atom, Val) -> binary_to_atom(Val, latin1);
 decode2(Fun, Val) when is_function(Fun) -> Fun(Val);

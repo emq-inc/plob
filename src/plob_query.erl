@@ -150,7 +150,8 @@ pk_fieldvals(Vals, #schema{pk=PK}=Schema) when is_list(PK) ->
 -spec map_to_fieldset(#{}, #schema{}) -> schemavals().
 map_to_fieldset(Map, Schema) ->
     FieldVals = [{get_field(K, Schema), V}
-                 || {K, V} <- maps:to_list(Map)],
+                 || {K, V} <- maps:to_list(Map),
+                    V =/= undefined],
     {Schema, FieldVals}.
 
 
