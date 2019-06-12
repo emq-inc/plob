@@ -211,7 +211,7 @@ get_field2(Fieldname, [_|Rest]) ->
                                fun list_to_tuple/1
                               } }]
           }).
-                                        
+
 
 pkget_test() ->
     #dbquery{
@@ -296,5 +296,3 @@ multicol_decode_test() ->
     #{ id := 1,
        vals := {a,b}
      } = Row.
-    
-    
