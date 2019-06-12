@@ -273,10 +273,13 @@ compile_bindings_test() ->
 
 compile_where_test() ->
     [<<" WHERE ">>,
-     [<<"one">>, <<" > ">>, #binding{ val=1 }], <<" AND ">>,
-     [<<"two">>, ?EQ, #binding{ val=2 }], <<" AND ">>,
-     [<<"three">>, ?EQ, #binding{ val=3 }], <<" AND ">>,
-     [<<"four">>, <<" IN ">>, #binding{ val=[4,5] }]] =
+     [<<"one">>, <<" > ">>, #binding{ col= <<"one">>, val=1 }],
+     <<" AND ">>,
+     [<<"two">>, ?EQ, #binding{ col= <<"two">>, val=2 }],
+     <<" AND ">>,
+     [<<"three">>, ?EQ, #binding{ col= <<"three">>, val=3 }],
+     <<" AND ">>,
+     [<<"four">>, ?EQ, #binding{ col= <<"four">>, val={any, [4,5]} }]] =
         compile_where(
           [{#schema{}, [{#field{name=one}, {op, ">", 1}},
                         {#field{columns=[two, three]}, [2, 3]},
