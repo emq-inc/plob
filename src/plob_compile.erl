@@ -21,10 +21,10 @@
 -define(EQ, <<" = ">>).
 
 -spec compile(operation()) -> #dbquery{}.
-compile(#select{fields=Fields, where=Where, limit=Limit, offset=Offset, order=Order }) ->
+compile(#select{schema=Schema, fields=Fields, where=Where, limit=Limit, offset=Offset, order=Order }) ->
     compile_dbquery(
       [<<"SELECT ">>, compile_field_names(Fields),
-       <<" FROM ">>, compile_table_names(Fields),
+       <<" FROM ">>, compile_from(Schema),
        compile_where(Where),
        case Order of
            undefined -> <<>>;
@@ -46,42 +46,28 @@ compile(#select{fields=Fields, where=Where, limit=Limit, offset=Offset, order=Or
        end
       ], Fields);
 
-compile(#insert{fields=Fields, return=Return}) ->
-    only_one_schema(Fields),
+compile(#insert{schema=Schema, fields=Fields, return=Return}) ->
     compile_dbquery(
-      [<<"INSERT INTO ">>, compile_table_names(Fields),
+      [<<"INSERT INTO ">>, compile_table_names(Schema),
        <<" (">>, compile_field_names(Fields),
        <<") VALUES (">>, term_join(prepare_bindings(Fields), <<", ">>),
        <<") RETURNING ">>, compile_field_names(Return)
       ], Return);
 
-compile(#update{fields=Fields, where=Where}) ->
-    only_one_schema(Fields),
-    only_one_schema(Where),
-    same_schema(Fields, Where),
+compile(#update{schema=Schema, fields=Fields, where=Where}) ->
     compile_dbquery(
-      [<<"UPDATE ">>, compile_table_names(Fields),
+      [<<"UPDATE ">>, compile_table_names(Schema),
        <<" SET ">>, compile_set(Fields),
        compile_where(Where)
       ], Fields);
 
-compile(#delete{where=Where}) ->
-    only_one_schema(Where),
+compile(#delete{schema=Schema, where=Where}) ->
     compile_dbquery(
-      [<<"DELETE FROM ">>, compile_table_names(Where),
+      [<<"DELETE FROM ">>, compile_table_names(Schema),
        compile_where(Where)
       ], null).
 
--spec only_one_schema(fieldset()) -> ok.
-only_one_schema([{_Schema, _}]) -> ok;
-only_one_schema(_) -> throw(too_many_schemas).
-
--spec same_schema(fieldset(), fieldset()) -> ok.
-same_schema([{Schema, _}], [{Schema, _}]) -> ok;
-same_schema(_, _) -> throw(different_schemas).
-
-
--spec compile_dbquery(unbound_query(), fieldset()) -> #dbquery{}.
+-spec compile_dbquery(unbound_query(), fieldvals()) -> #dbquery{}.
 compile_dbquery(Query, Fields) ->
     {SQL, Bindings} = compile_bindings(Query),
     #dbquery{
@@ -120,7 +106,6 @@ get_placeholder(#binding{ val = {any, _} }, Count) ->
     <<"ANY(", PH/binary, ")">>;
 get_placeholder(#binding{}, Count) ->
     get_placeholder(Count).
-
 get_placeholder(Count) ->
     CountBin = integer_to_binary(Count),
     <<"$", CountBin/binary>>.
@@ -132,49 +117,77 @@ get_binding_val(#binding{ val = Val }) ->
     Val.
 
 
-
--spec compile_table_names(fieldset()) -> iodata().
-compile_table_names([{Schema, _Fields}]) ->
+-spec compile_table_names(#schema{}) -> iodata().
+compile_table_names(#schema{}=Schema) ->
     [atom_to_binary(Schema#schema.table, latin1)];
 compile_table_names(Other) ->
-    %%% TODO: Joins go here
     throw({not_single_table, Other}).
 
+-spec compile_from(#schema{}) -> iodata().
+compile_from(#schema{}=Schema) ->
+    compile_table_names(Schema);
+compile_from(Other) ->
+    % TODO: Joins go here!
+    throw({joins_not_supported, Other}).
 
--spec compile_field_names(fieldset()) -> iodata().
-compile_field_names(Fieldset) ->
+
+-spec compile_field_names(fieldvals()) -> iodata().
+compile_field_names(FieldVals) ->
     Names = lists:append(
               [field_colnames(Field)
-               || {_Schema, FieldVals} <- Fieldset,
-                  {Field, _} <- FieldVals]),
+               || {_Schema, {Field, _Val}} <- FieldVals]),
     term_join(Names, <<", ">>).
 
 
--spec compile_field_assigns(fieldset()) -> unbound_query().
-compile_field_assigns(Fieldset) ->
-    [[Binding#binding.col, Binding#binding.op, Binding]
-     || Binding <- prepare_bindings(Fieldset)].
-
-
--spec compile_where(fieldset()) -> unbound_query().
-compile_where(Fieldset) ->
-    case compile_field_assigns(Fieldset) of
-        [] -> [];
-        Assigns -> [ <<" WHERE ">> | term_join(Assigns, <<" AND ">>)]
+-spec compile_where(#whereval{}) -> unbound_query().
+compile_where(WhereVal) ->
+    case compile_whereval(WhereVal) of
+        ignore -> [];
+        Terms -> [ <<" WHERE ">>, Terms ]
     end.
 
--spec compile_set(fieldset()) -> unbound_query().
-compile_set(Fieldset) ->
-    term_join(compile_field_assigns(Fieldset), <<", ">>).
+
+-spec compile_whereval(#whereval{}) -> unbound_query().
+% TODO: Not
+compile_whereval(#whereval{ conjugation = Conjugation,
+                            fieldvals = FieldVals }) ->
+    Terms = lists:filtermap(
+              fun(#whereval{}=NestedWhereVal) ->
+                      case compile_whereval(NestedWhereVal) of
+                          ignore -> false;
+                          NestedTerms -> {true, NestedTerms}
+                      end;
+                 ({_, _}=FieldVal) ->
+                      {true, compile_field_assign(FieldVal)}
+              end, FieldVals),
+    [<<"(">>, conjugate(Terms, Conjugation), <<")">>].
 
 
--spec prepare_bindings(fieldset()) -> [#binding{}].
-prepare_bindings(Fieldset) ->
+
+-spec compile_field_assign(fieldval()) -> unbound_query().
+compile_field_assign(FieldVal) ->
+    Assigns = [[Binding#binding.col, Binding#binding.op, Binding]
+               || Binding <- prepare_binding(FieldVal)],
+    conjugate(Assigns, 'and').
+
+
+-spec compile_set(fieldvals()) -> unbound_query().
+compile_set(FieldVals) ->
+    term_join(lists:map(fun compile_field_assign/1, FieldVals), <<", ">>).
+
+
+-spec prepare_bindings(fieldvals()) -> [#binding{}].
+prepare_bindings(FieldVals) ->
+    lists:map(fun prepare_binding/1, FieldVals).
+
+
+-spec prepare_binding(fieldval()) -> #binding{}.
+prepare_binding({_Schema, {Field, ErlVal}}) ->
     [#binding{ col=Col, op=Op, val=DBVal }
-     || {_Schema, FieldVals} <- Fieldset,
-        {Field, ErlVal} <- FieldVals,
-        {Col, {Op, DBVal}} <- lists:zip(field_colnames(Field),
-                                        field_values(ErlVal, Field))].
+     || {Col, {Op, DBVal}} <-
+            lists:zip(field_colnames(Field),
+                      field_values(ErlVal, Field))].
+
 
 -spec field_colnames(#field{}) -> [binary()].
 field_colnames(Field) ->
@@ -207,6 +220,17 @@ field_values(ErlVal, Field) ->
                     V -> {?EQ, V}
                 end,
     [{Op, plob_codec:encode(Field#field.codec, Val)}].
+
+
+-spec conjugate([any()], conjugation()) -> [any()].
+conjugate(Parts, Conjugation) ->
+    term_join(Parts, compile_conjugation(Conjugation)).
+
+
+-spec compile_conjugation(conjugation()) -> binary().
+compile_conjugation('and') -> <<" AND ">>;
+compile_conjugation('or') -> <<" OR ">>;
+compile_conjugation('not') -> <<" NOT ">>.
 
 
 -spec term_join([any()], any()) -> [any()].
@@ -243,22 +267,23 @@ field_values_test() ->
     [{?EQ, foo}, {?EQ, bar}] = field_values([foo,bar], #field{columns=[one,two]}).
 
 compile_table_names_test() ->
-    [<<"sometable">>] = compile_table_names(
-                          [{#schema{table=sometable}, []}]).
+    [<<"sometable">>] = compile_table_names(#schema{table=sometable}).
 
 compile_field_names_test() ->
     [<<"one">>, <<", ">>, <<"two">>, <<", ">>,  <<"three">>] =
         compile_field_names(
-          [{#schema{}, [{#field{name=one}, undefined},
-                        {#field{columns=[two, three]}, undefined} ]}]).
+          [{#schema{}, {#field{name=one}, undefined}},
+           {#schema{}, {#field{columns=[two, three]}, undefined}}
+          ]).
 
 prepare_bindings_test() ->
-    [#binding{ col= <<"one">>, val=1 },
-     #binding{ col= <<"two">>, val=2 },
-     #binding{ col= <<"three">>, val=3 }
+    [[#binding{ col= <<"one">>, val=1 }],
+     [#binding{ col= <<"two">>, val=2 },
+      #binding{ col= <<"three">>, val=3 }]
     ] = prepare_bindings(
-          [{#schema{}, [{#field{name=one}, 1},
-                        {#field{columns=[two, three]}, [2,3]} ]}]).
+          [{#schema{}, {#field{name=one}, 1}},
+           {#schema{}, {#field{columns=[two, three]}, [2,3]}}
+          ]).
 
 compile_bindings_test() ->
     Unbound = [[<<"one">>, ?EQ, #binding{ val=1 }], <<", ">>,
@@ -272,15 +297,24 @@ compile_bindings_test() ->
 
 
 compile_where_test() ->
-    [<<" WHERE ">>,
-     [<<"one">>, <<" > ">>, #binding{ col= <<"one">>, val=1 }],
-     <<" AND ">>,
-     [<<"two">>, ?EQ, #binding{ col= <<"two">>, val=2 }],
-     <<" AND ">>,
-     [<<"three">>, ?EQ, #binding{ col= <<"three">>, val=3 }],
-     <<" AND ">>,
-     [<<"four">>, ?EQ, #binding{ col= <<"four">>, val={any, [4,5]} }]] =
-        compile_where(
-          [{#schema{}, [{#field{name=one}, {op, ">", 1}},
-                        {#field{columns=[two, three]}, [2, 3]},
-                        {#field{name=four}, {op, in, [4,5]}}]}]).
+    [<<" WHERE ">>, <<"(">>,
+     <<"one">>, <<" > ">>, #binding{ col= <<"one">>, val=1 }, <<" AND ">>,
+     <<"two">>, ?EQ, #binding{ col= <<"two">>, val=2 }, <<" AND ">>,
+     <<"three">>, ?EQ, #binding{ col= <<"three">>, val=3 }, <<" AND ">>,
+     <<"four">>, <<" = ">>, #binding{ col= <<"four">>, val={any, [4,5]} }, <<" AND ">>,
+     <<"(">>, <<"five">>, <<" = ">>, #binding{ col= <<"five">>, val= <<"foo">> }, <<" OR ">>,
+              <<"six">>, <<" = ">>, #binding{ col= <<"six">>, val= <<"bar">> }, <<")">>,
+    <<")">>]%, <<" AND ">>]
+     %[<<" NOT ( ">>, <<"five">>, ?EQ, #binding{ val = 6 }]]  =
+        = lists:flatten(compile_where(
+            #whereval{
+               conjugation = 'and',
+               fieldvals = [{#schema{}, {#field{name=one}, {op, ">", 1}}},
+                            {#schema{}, {#field{columns=[two, three]}, [2, 3]}},
+                            {#schema{}, {#field{name=four}, {op, in, [4,5]}}},
+                            #whereval{ conjugation = 'or',
+                                       fieldvals = [{#schema{}, {#field{name=five}, <<"foo">>}},
+                                                    {#schema{}, {#field{name=six}, <<"bar">>}}]}
+%                        {'not', {#field{name=five}, 6}}
+                           ]})).
+

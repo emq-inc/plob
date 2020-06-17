@@ -13,7 +13,9 @@
 -type validator() :: fun((erlval()) -> ok | {error, any()}).
 
 -type rowvals() :: #{ fieldname() => erlval() }.
-          
+-type conjugation() :: 'and' | 'or' | 'not'.
+-type wherespec() :: rowvals() | {conjugation(), wherespec()}.
+
 -record(field, {
           name :: fieldname(),
           columns :: columns() | undefined,
@@ -31,14 +33,18 @@
 -type fieldop() :: {op, operator(), erlval()}.
 
 -type fieldval() :: {#field{}, erlval() | fieldop() | undefined}.
--type schemavals() :: {#schema{}, [fieldval()]}.
--type fieldset() :: [schemavals()].
+-type fieldvals() :: [{#schema{}, fieldval()}].
 -type bindings() :: [dbval()].
+
+-record(whereval, {
+          conjugation = 'and' :: conjugation(),
+          fieldvals = [] :: [fieldvals() | #whereval{}]
+        }).
 
 
 -record(dbquery, {
           sql :: binary(),
-          fields :: fieldset(),
+          fields :: fieldvals(),
           bindings :: bindings()
          }).
 
@@ -46,5 +52,3 @@
           raw :: any(),
           module :: atom()
          }).
-
-
