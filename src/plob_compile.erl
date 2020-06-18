@@ -148,7 +148,9 @@ compile_where(WhereVal) ->
 
 
 -spec compile_whereval(#whereval{}) -> unbound_query().
-% TODO: Not
+compile_whereval(#whereval{ conjugation = 'not' }=WhereVal) ->
+    Terms = compile_whereval(WhereVal#whereval{ conjugation = 'and' }),
+    [<<"NOT ">>|Terms];
 compile_whereval(#whereval{ conjugation = Conjugation,
                             fieldvals = FieldVals }) ->
     Terms = lists:filtermap(
@@ -229,8 +231,7 @@ conjugate(Parts, Conjugation) ->
 
 -spec compile_conjugation(conjugation()) -> binary().
 compile_conjugation('and') -> <<" AND ">>;
-compile_conjugation('or') -> <<" OR ">>;
-compile_conjugation('not') -> <<" NOT ">>.
+compile_conjugation('or') -> <<" OR ">>.
 
 
 -spec term_join([any()], any()) -> [any()].
@@ -303,10 +304,12 @@ compile_where_test() ->
      <<"three">>, ?EQ, #binding{ col= <<"three">>, val=3 }, <<" AND ">>,
      <<"four">>, <<" = ">>, #binding{ col= <<"four">>, val={any, [4,5]} }, <<" AND ">>,
      <<"(">>, <<"five">>, <<" = ">>, #binding{ col= <<"five">>, val= <<"foo">> }, <<" OR ">>,
-              <<"six">>, <<" = ">>, #binding{ col= <<"six">>, val= <<"bar">> }, <<")">>,
-    <<")">>]%, <<" AND ">>]
-     %[<<" NOT ( ">>, <<"five">>, ?EQ, #binding{ val = 6 }]]  =
-        = lists:flatten(compile_where(
+              <<"six">>, <<" = ">>, #binding{ col= <<"six">>, val= <<"bar">> },
+     <<")">>, <<" AND ">>,
+     <<"NOT ">>, <<"(">>, <<"seven">>, ?EQ, #binding{ col= <<"seven">>, val = <<"wib">> }, <<")">>,
+     <<")">>
+    ] = lists:flatten(
+          compile_where(
             #whereval{
                conjugation = 'and',
                fieldvals = [{#schema{}, {#field{name=one}, {op, ">", 1}}},
@@ -314,7 +317,8 @@ compile_where_test() ->
                             {#schema{}, {#field{name=four}, {op, in, [4,5]}}},
                             #whereval{ conjugation = 'or',
                                        fieldvals = [{#schema{}, {#field{name=five}, <<"foo">>}},
-                                                    {#schema{}, {#field{name=six}, <<"bar">>}}]}
-%                        {'not', {#field{name=five}, 6}}
+                                                    {#schema{}, {#field{name=six}, <<"bar">>}}]},
+                            #whereval{ conjugation = 'not',
+                                       fieldvals = [{#schema{}, {#field{name=seven}, <<"wib">>}}]}
                            ]})).
 

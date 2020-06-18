@@ -162,7 +162,7 @@ map_to_fieldvals(Map, Schema) ->
 
 -spec spec_to_wherevals(wherespec(), #schema{}) -> #whereval{}.
 spec_to_wherevals(RowVals, Schema) when is_map(RowVals) ->
-    spec_to_wherevals({'and', RowVals}, Schema);
+   spec_to_wherevals({'and', RowVals}, Schema);
 spec_to_wherevals({Conjugation, RowVals}, Schema) when is_map(RowVals) ->
     #whereval{ conjugation = Conjugation,
                fieldvals = map_to_fieldvals(RowVals, Schema)};
@@ -259,6 +259,25 @@ multicol_select_test() ->
     #dbquery{
        sql = <<"SELECT id, one, two FROM test_multicol WHERE (one = $1 AND two = $2)">>,
        bindings = [a, b]
+      } = plob_compile:compile(Query).
+
+conjugation_test() ->
+    Query = filter({'and', [#{ id => 1, value => <<"a">> },
+                            {'not', #{ id => 2, value => <<"b">> }},
+                            {'or', [#{ id => 3, value => <<"c">> },
+                                    {'and', [#{ id => 4 },
+                                             {'not', [{'or', #{ value => <<"d">>,
+                                                                {alias, value, foo} => <<"e">> }
+                                                      }]}]}]}]},
+                  ?TEST_SCHEMA_SIMPLE,
+                  get_obj(?TEST_SCHEMA_SIMPLE)),
+    #dbquery{
+       sql = <<"SELECT id, value, note FROM test_table "
+               "WHERE ((id = $1 AND value = $2) AND "
+                      "NOT (id = $3 AND value = $4) AND "
+                      "((id = $5 AND value = $6) OR "
+                       "((id = $7) AND NOT ((value = $8 OR value = $9)))))">>,
+       bindings = [1, <<"a">>, 2, <<"b">>, 3, <<"c">>, 4, <<"d">>, <<"e">>]
       } = plob_compile:compile(Query).
 
 

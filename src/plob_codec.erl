@@ -23,7 +23,6 @@ encode(Encoder, Val) -> encode2(Encoder, Val).
 
 -spec encode2(encoder(), any()) -> any().
 encode2(_Codec, null) -> null;
-encode2(_Codec, undefined) -> null;
 encode2(undefined, Val) -> Val;
 encode2(datetime, Val) -> Val;
 encode2(datetimetz, Val) ->
@@ -42,7 +41,7 @@ decode({_, Decoder}, Val) -> decode2(Decoder, Val);
 decode(Decoder, Val) -> decode2(Decoder, Val).
 
 -spec decode2(decoder(), any()) -> any().
-decode2(_Codec, null) -> undefined;
+decode2(_Codec, null) -> null;
 decode2(undefined, Val) -> Val;
 %% Round off microseconds as a convenience to make jsx encoder happy.
 decode2(datetime, {{_,_,_}=Date, {H,M,SMS}}) -> {Date, {H, M, round(SMS)}};

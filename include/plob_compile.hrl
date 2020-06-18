@@ -7,6 +7,11 @@
 %%% Created : 13 Dec 2014 by Brendon Hogger <brendonh@powder>
 %%%-------------------------------------------------------------------
 
+-record(whereval, {
+          conjugation = 'and' :: conjugation(),
+          fieldvals = [] :: [fieldvals() | #whereval{}]
+        }).
+
 -record(select, { schema :: #schema{},
                   fields :: fieldvals(),
                   where = #whereval{},
@@ -33,6 +38,7 @@
          }).
 
 -type operation() :: #select{} | #insert{} | #update{}.
+
 
 -record(binding, {
           col :: binary(),

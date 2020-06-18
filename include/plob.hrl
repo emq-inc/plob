@@ -31,15 +31,9 @@
 
 
 -type fieldop() :: {op, operator(), erlval()}.
-
 -type fieldval() :: {#field{}, erlval() | fieldop() | undefined}.
 -type fieldvals() :: [{#schema{}, fieldval()}].
 -type bindings() :: [dbval()].
-
--record(whereval, {
-          conjugation = 'and' :: conjugation(),
-          fieldvals = [] :: [fieldvals() | #whereval{}]
-        }).
 
 
 -record(dbquery, {
