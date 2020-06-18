@@ -163,11 +163,11 @@ map_to_fieldvals(Map, Schema) ->
 -spec spec_to_wherevals(wherespec(), #schema{}) -> #whereval{}.
 spec_to_wherevals(RowVals, Schema) when is_map(RowVals) ->
    spec_to_wherevals({'and', RowVals}, Schema);
-spec_to_wherevals({Conjugation, RowVals}, Schema) when is_map(RowVals) ->
-    #whereval{ conjugation = Conjugation,
+spec_to_wherevals({Conjunction, RowVals}, Schema) when is_map(RowVals) ->
+    #whereval{ conjunction = Conjunction,
                fieldvals = map_to_fieldvals(RowVals, Schema)};
-spec_to_wherevals({Conjugation, Nested}, Schema) when is_list(Nested) ->
-    #whereval{ conjugation = Conjugation,
+spec_to_wherevals({Conjunction, Nested}, Schema) when is_list(Nested) ->
+    #whereval{ conjunction = Conjunction,
                fieldvals = [spec_to_wherevals(WhereSpec, Schema)
                             || WhereSpec <- Nested] }.
 
@@ -261,7 +261,7 @@ multicol_select_test() ->
        bindings = [a, b]
       } = plob_compile:compile(Query).
 
-conjugation_test() ->
+conjunction_test() ->
     Query = filter({'and', [#{ id => 1, value => <<"a">> },
                             {'not', #{ id => 2, value => <<"b">> }},
                             {'or', [#{ id => 3, value => <<"c">> },

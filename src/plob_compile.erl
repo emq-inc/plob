@@ -148,10 +148,10 @@ compile_where(WhereVal) ->
 
 
 -spec compile_whereval(#whereval{}) -> unbound_query().
-compile_whereval(#whereval{ conjugation = 'not' }=WhereVal) ->
-    Terms = compile_whereval(WhereVal#whereval{ conjugation = 'and' }),
+compile_whereval(#whereval{ conjunction = 'not' }=WhereVal) ->
+    Terms = compile_whereval(WhereVal#whereval{ conjunction = 'and' }),
     [<<"NOT ">>|Terms];
-compile_whereval(#whereval{ conjugation = Conjugation,
+compile_whereval(#whereval{ conjunction = Conjunction,
                             fieldvals = FieldVals }) ->
     Terms = lists:filtermap(
               fun(#whereval{}=NestedWhereVal) ->
@@ -162,7 +162,7 @@ compile_whereval(#whereval{ conjugation = Conjugation,
                  ({_, _}=FieldVal) ->
                       {true, compile_field_assign(FieldVal)}
               end, FieldVals),
-    [<<"(">>, conjugate(Terms, Conjugation), <<")">>].
+    [<<"(">>, conjugate(Terms, Conjunction), <<")">>].
 
 
 
@@ -224,14 +224,14 @@ field_values(ErlVal, Field) ->
     [{Op, plob_codec:encode(Field#field.codec, Val)}].
 
 
--spec conjugate([any()], conjugation()) -> [any()].
-conjugate(Parts, Conjugation) ->
-    term_join(Parts, compile_conjugation(Conjugation)).
+-spec conjugate([any()], conjunction()) -> [any()].
+conjugate(Parts, Conjunction) ->
+    term_join(Parts, compile_conjunction(Conjunction)).
 
 
--spec compile_conjugation(conjugation()) -> binary().
-compile_conjugation('and') -> <<" AND ">>;
-compile_conjugation('or') -> <<" OR ">>.
+-spec compile_conjunction(conjunction()) -> binary().
+compile_conjunction('and') -> <<" AND ">>;
+compile_conjunction('or') -> <<" OR ">>.
 
 
 -spec term_join([any()], any()) -> [any()].
@@ -311,14 +311,14 @@ compile_where_test() ->
     ] = lists:flatten(
           compile_where(
             #whereval{
-               conjugation = 'and',
+               conjunction = 'and',
                fieldvals = [{#schema{}, {#field{name=one}, {op, ">", 1}}},
                             {#schema{}, {#field{columns=[two, three]}, [2, 3]}},
                             {#schema{}, {#field{name=four}, {op, in, [4,5]}}},
-                            #whereval{ conjugation = 'or',
+                            #whereval{ conjunction = 'or',
                                        fieldvals = [{#schema{}, {#field{name=five}, <<"foo">>}},
                                                     {#schema{}, {#field{name=six}, <<"bar">>}}]},
-                            #whereval{ conjugation = 'not',
+                            #whereval{ conjunction = 'not',
                                        fieldvals = [{#schema{}, {#field{name=seven}, <<"wib">>}}]}
                            ]})).
 

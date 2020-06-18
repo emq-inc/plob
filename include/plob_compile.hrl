@@ -8,7 +8,7 @@
 %%%-------------------------------------------------------------------
 
 -record(whereval, {
-          conjugation = 'and' :: conjugation(),
+          conjunction = 'and' :: conjunction(),
           fieldvals = [] :: [fieldvals() | #whereval{}]
         }).
 

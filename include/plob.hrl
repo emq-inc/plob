@@ -13,8 +13,8 @@
 -type validator() :: fun((erlval()) -> ok | {error, any()}).
 
 -type rowvals() :: #{ fieldname() => erlval() }.
--type conjugation() :: 'and' | 'or' | 'not'.
--type wherespec() :: rowvals() | {conjugation(), wherespec()}.
+-type conjunction() :: 'and' | 'or' | 'not'.
+-type wherespec() :: rowvals() | {conjunction(), wherespec()}.
 
 -record(field, {
           name :: fieldname(),
