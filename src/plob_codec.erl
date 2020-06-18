@@ -23,6 +23,7 @@ encode(Encoder, Val) -> encode2(Encoder, Val).
 
 -spec encode2(encoder(), any()) -> any().
 encode2(_Codec, null) -> null;
+encode2(_Codec, undefined) -> null;
 encode2(undefined, Val) -> Val;
 encode2(datetime, Val) -> Val;
 encode2(datetimetz, Val) ->

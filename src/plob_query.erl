@@ -156,8 +156,7 @@ pk_fieldvals(Vals, #schema{pk=PK}) when is_list(PK) ->
 -spec map_to_fieldvals(#{}, #schema{}) -> fieldvals().
 map_to_fieldvals(Map, Schema) ->
     [{Schema, {get_field(K, Schema), V}}
-     || {K, V} <- maps:to_list(Map),
-        V =/= undefined].
+     || {K, V} <- maps:to_list(Map)].
 
 
 -spec spec_to_wherevals(wherespec(), #schema{}) -> #whereval{}.
