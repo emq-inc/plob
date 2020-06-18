@@ -7,28 +7,38 @@
 %%% Created : 13 Dec 2014 by Brendon Hogger <brendonh@powder>
 %%%-------------------------------------------------------------------
 
--record(select, { fields :: fieldset(),
-                  where = [] :: fieldset(),
+-record(whereval, {
+          conjunction = 'and' :: conjunction(),
+          fieldvals = [] :: [fieldvals() | #whereval{}]
+        }).
+
+-record(select, { schema :: #schema{},
+                  fields :: fieldvals(),
+                  where = #whereval{},
                   limit :: integer() | undefined,
                   offset :: integer() | undefined,
                   order :: binary() | undefined
                 }).
 
 -record(insert, {
-          fields :: fieldset(),
-          return :: fieldset()
+          schema :: #schema{},
+          fields :: fieldvals(),
+          return :: fieldvals()
          }).
 
 -record(update, {
-          fields :: fieldset(),
-          where :: fieldset()
+          schema :: #schema{},
+          fields :: fieldvals(),
+          where :: #whereval{}
          }).
 
 -record(delete, {
-          where :: fieldset()
+          schema :: #schema{},
+          where :: #whereval{}
          }).
 
 -type operation() :: #select{} | #insert{} | #update{}.
+
 
 -record(binding, {
           col :: binary(),
