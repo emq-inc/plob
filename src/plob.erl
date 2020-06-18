@@ -46,11 +46,11 @@ get(PK, Schema) ->
       plob_query:lookup(PK, plob_query:get_obj(Schema))).
 
 
--spec find(rowvals(), #schema{} | atom()) -> #dbquery{}.
+-spec find(wherespec(), #schema{} | atom()) -> #dbquery{}.
 find(Vals, Schema) ->
     find(Vals, Schema, #{}).
 
--spec find(rowvals(), #schema{} | atom(), map()) -> #dbquery{}.
+-spec find(wherespec(), #schema{} | atom(), map()) -> #dbquery{}.
 find(Vals, Schema, Opts) when is_atom(Schema) ->
     find(Vals, ?SCHEMA(Schema), Opts);
 find(Vals, Schema, Opts) ->
@@ -92,14 +92,14 @@ update(Vals, Schema) ->
     update(OtherVals, PKVals, Schema).
 
 
--spec update(rowvals(), rowvals(), #schema{} | atom()) -> #dbquery{}.
+-spec update(rowvals(), wherespec(), #schema{} | atom()) -> #dbquery{}.
 update(Vals, Where, Schema) when is_atom(Schema) ->
     update(Vals, Where, ?SCHEMA(Schema));
 update(Vals, Where, Schema) ->
     plob_compile:compile(plob_query:update(Vals, Where, Schema)).
 
 
--spec delete(rowvals(), #schema{} | atom()) -> #dbquery{}.
+-spec delete(wherespec(), #schema{} | atom()) -> #dbquery{}.
 delete(Where, Schema) when is_atom(Schema) ->
     delete(Where, ?SCHEMA(Schema));
 delete(Where, Schema) ->

@@ -66,14 +66,14 @@ insert(Map, Schema) ->
              return = select_pk_fields(Schema) }.
 
 
--spec update(rowvals(), rowvals(), #schema{}) -> #update{}.
+-spec update(rowvals(), wherespec(), #schema{}) -> #update{}.
 update(Vals, WhereSpec, Schema) ->
     #update{ schema = Schema,
              fields = map_to_fieldvals(Vals, Schema),
              where = spec_to_wherevals(WhereSpec, Schema) }.
 
 
--spec delete(rowvals(), #schema{}) -> #delete{}.
+-spec delete(wherespec(), #schema{}) -> #delete{}.
 delete(WhereSpec, Schema) ->
     #delete{ schema = Schema,
              where = spec_to_wherevals(WhereSpec, Schema) }.
