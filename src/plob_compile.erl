@@ -153,17 +153,18 @@ compile_whereval(#whereval{ conjunction = 'not' }=WhereVal) ->
     [<<"NOT ">>|Terms];
 compile_whereval(#whereval{ conjunction = Conjunction,
                             fieldvals = FieldVals }) ->
-    Terms = lists:filtermap(
-              fun(#whereval{}=NestedWhereVal) ->
-                      case compile_whereval(NestedWhereVal) of
-                          ignore -> false;
-                          NestedTerms -> {true, NestedTerms}
-                      end;
-                 ({_, _}=FieldVal) ->
-                      {true, compile_field_assign(FieldVal)}
-              end, FieldVals),
-    [<<"(">>, conjugate(Terms, Conjunction), <<")">>].
-
+    case lists:filtermap(
+           fun(#whereval{}=NestedWhereVal) ->
+                   case compile_whereval(NestedWhereVal) of
+                       ignore -> false;
+                       NestedTerms -> {true, NestedTerms}
+                   end;
+              ({_, _}=FieldVal) ->
+                   {true, compile_field_assign(FieldVal)}
+           end, FieldVals) of
+        [] -> ignore;
+        Terms -> [<<"(">>, conjugate(Terms, Conjunction), <<")">>]
+    end.
 
 
 -spec compile_field_assign(fieldval()) -> unbound_query().
@@ -296,7 +297,6 @@ compile_bindings_test() ->
     Vals = [1, 2, [3, 4]],
     {Bound, Vals} = compile_bindings(Unbound).
 
-
 compile_where_test() ->
     [<<" WHERE ">>, <<"(">>,
      <<"one">>, <<" > ">>, #binding{ col= <<"one">>, val=1 }, <<" AND ">>,
@@ -322,3 +322,5 @@ compile_where_test() ->
                                        fieldvals = [{#schema{}, {#field{name=seven}, <<"wib">>}}]}
                            ]})).
 
+compile_nowhere_test() ->
+    [] = lists:flatten(compile_where(#whereval{ conjunction = 'and', fieldvals = [] })).
