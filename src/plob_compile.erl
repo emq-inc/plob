@@ -217,6 +217,10 @@ field_values(ErlVal, #field{columns=Columns}=Field)
 field_values({op, in, Vals}, Field) ->
     [{<<" = ">>, {any, [plob_codec:encode(Field#field.codec, Val)
                         || Val <- Vals]}}];
+field_values({op, is_null}, _Field) ->
+    [{<<" IS ">>, {sql, <<"NULL">>}}];
+field_values({op, is_not_null}, _Field) ->
+    [{<<" IS NOT ">>, {sql, <<"NULL">>}}];
 field_values(ErlVal, Field) ->
     {Op, Val} = case ErlVal of
                     {op, O, V} -> {normalize_operator(O), V};
